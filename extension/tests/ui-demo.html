@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Veylo · Synthetic UI preview</title>
+  <link rel="stylesheet" href="ui-demo.css">
+</head>
+<body>
+  <main class="demo-page">
+    <header class="demo-heading"><p class="demo-eyebrow">LOCAL DESIGN LAB</p><h1>Veylo, in context.</h1><p>真实共享组件 · 合成 Chrome API · 无凭据、原生程序或远端请求</p></header>
+    <section class="demo-controls" aria-label="预览控制">
+      <label>平台<select id="demo-platform"><option value="bili">bilibili · 分 P</option><option value="youtube">YouTube · 视频</option><option value="x">X · 视频</option><option value="playlist">YouTube · 播放列表</option><option value="channel">YouTube · 频道</option><option value="invalid">不支持的链接</option></select></label>
+      <label>主题<select id="demo-theme"><option value="light">浅色</option><option value="dark">深色</option><option value="auto">跟随系统</option></select></label>
+      <label>任务<select id="demo-jobs"><option value="mixed">混合状态</option><option value="active">进行中</option><option value="failed">失败</option><option value="empty">空态</option></select></label>
+      <label>目录<select id="demo-directory"><option value="default">软件默认</option><option value="long">超长中文路径</option></select></label>
+      <label>通知权限<select id="demo-permission"><option value="grant">模拟允许</option><option value="deny">模拟拒绝</option></select></label>
+      <label>本机内核<select id="demo-engine"><option value="available">模拟可用</option><option value="missing">桥接连通 / 内核缺失</option></select></label>
+      <label>本机组件<select id="demo-hosts"><option value="legacy">旧版（无新特性）</option><option value="current">2.4.1（精简版）</option></select></label>
+      <button id="demo-tests" type="button">运行 DOM 自测</button>
+    </section>
+    <div class="demo-grid">
+      <section class="demo-stage"><div class="demo-stage-heading"><h2>Toolbar / 独立面板</h2><span>408 CSS px</span></div><iframe id="demo-popup" title="Veylo toolbar preview" src="ui-demo-frame.html?platform=bili&theme=light"></iframe><p id="demo-metrics" class="demo-caption">正在测量组件…</p></section>
+      <section class="demo-stage"><div class="demo-stage-heading"><h2>In-page / Shadow DOM</h2><span>356 CSS px</span></div><iframe id="demo-content" title="Veylo hostile-page shadow preview" src="ui-demo-frame.html?variant=content&platform=bili&theme=light"></iframe><p class="demo-caption">宿主刻意带有 body / button / * 的 !important 污染。面板位于真实 ShadowRoot，复制、展开与关闭均可操作。</p></section>
+    </div>
+    <section class="demo-result-section"><h2>确定性自测</h2><pre id="demo-results" aria-live="polite">点击“运行 DOM 自测”。所有路径、标题、错误与任务均为合成 fixture，不会读取或输出真实 Cookie。</pre></section>
+    <footer class="demo-help">从扩展根目录运行 <code>python -m http.server 8765 --bind 127.0.0.1</code>，打开 <code>http://127.0.0.1:8765/tests/ui-demo.html</code>。测试文件只在 tests/，不会由扩展加载。</footer>
+  </main>
+  <script src="chrome-fixture.js"></script>
+  <script src="ui-dom-tests.js"></script>
+  <script src="ui-demo.js"></script>
+</body>
+</html>

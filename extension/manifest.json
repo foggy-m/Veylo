@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Veylo — Video Downloader",
+  "short_name": "Veylo",
+  "version": "2.4.2",
+  "description": "Video, your way. 下载 YouTube、X 与哔哩哔哩视频或音频；本机保存、字幕、任务记录与失败重试。",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "clipboardWrite",
+    "offscreen",
+    "nativeMessaging",
+    "contextMenus",
+    "alarms"
+  ],
+  "optional_permissions": [
+    "notifications"
+  ],
+  "host_permissions": [],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    },
+    "default_title": "Veylo · 留下喜欢的内容"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzsGHyTAE7lY6om0DiqcHpfNkJ9D6Z/G+E2iGG+70LwEPOjYhaKijPEehnZkSYcc6+VgBfLAv6nTpQXNNhNEdaGNlMlg18zy8+UZvM/aM3fWYYGmEDtaPIi+GNrIKxabcot70AKHaN5tYGFnKCKOTJM6LsvKanEUKy48/ni4CG2o6sb9bMSlyoEzpKeoETurDFlI3FxUf10U9l60fzbKUJV9QR8DbtPP+usNcNrzMKSGPrNCxkGANzC2/4mv8OiljsQu047fsbc90Q+fNI5yLpSqquW4vkF0soQwfSjZ4+E0Bqt75r/TieBt9cWZ7ijkGtRSAe4VztBNiNb6NO9o81QIDAQAB",
+  "minimum_chrome_version": "116",
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+V"
+      },
+      "description": "打开 Veylo 下载面板"
+    }
+  },
+  "web_accessible_resources": []
+}

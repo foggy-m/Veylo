@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <title>Veylo</title>
+  <rect width="64" height="64" rx="18" fill="#15282C"/>
+  <path d="M15.5 20H25.6L35 44.5H25.2L15.5 20Z" fill="#F6F7F3"/>
+  <path d="M38.3 20H49L37.2 45H26.7L38.3 20Z" fill="#69DDC3"/>
+  <circle cx="49" cy="14" r="4" fill="#F28C7D"/>
+</svg>

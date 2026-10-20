@@ -1,0 +1,46 @@
+# Credentials, profiles and personal configuration
+.env
+.env.*
+!.env.example
+*cookie*.txt
+*cookie*.json
+tabbit_ud/
+*User Data*/
+Local State
+LocalState
+Cookies
+Cookies-*
+Login Data*
+config.ini
+config.json
+*_paths.json
+**/com.shiguang.*.json
+# Private task data and build outputs
+**/jobs/
+*.log
+*.exe
+*.dll
+*.pdb
+*.zip
+*.pem
+*.key
+*.pfx
+*.p12
+__pycache__/
+*.py[cod]
+node_modules/
+.pytest_cache/
+.venv/
+venv/
+archive-legacy/
+fy-extension/
+_archive*/
+
+# Isolated regression fixtures
+**/native_veylo_run_*/
+**/bili_veylo_run_*/
+*.jsonl
+
+# Local verification evidence
+.test-results/
+**/bridge-*/

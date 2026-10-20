@@ -1,0 +1,35 @@
+{
+  "repository": "https://github.com/lucide-icons/lucide",
+  "commit": "d672fc43dbf60962d9d829e35bc3b3e5ed89a178",
+  "license": "ISC; retained MIT attribution for Feather-derived icons",
+  "icons": [
+    "download",
+    "folder-open",
+    "history",
+    "music-2",
+    "subtitles",
+    "video",
+    "copy",
+    "arrow-up-right",
+    "circle-check",
+    "circle-alert",
+    "x",
+    "chevron-down",
+    "settings-2",
+    "loader-circle",
+    "link",
+    "refresh-cw",
+    "external-link",
+    "chevron-left",
+    "info",
+    "check",
+    "bell",
+    "keyboard",
+    "ellipsis"
+  ],
+  "sourceAliases": {
+    "history": "rotate-ccw",
+    "subtitles": "captions"
+  },
+  "runtimeNetworkRequests": false
+}

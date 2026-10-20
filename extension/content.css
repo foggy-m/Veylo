@@ -1,0 +1,47 @@
+/* Loaded only INSIDE #sg-root's ShadowRoot. No host-page selectors or global resets. */
+:host {
+  all: initial !important;
+  display: block !important;
+  position: fixed !important;
+  inset: auto 22px 28px auto !important;
+  z-index: 2147483647 !important;
+  width: min(356px, calc(100vw - 24px)) !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #15282c !important;
+  font: 12px/1.5 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif !important;
+  text-align: left !important;
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+  pointer-events: none !important;
+  color-scheme: light dark !important;
+  isolation: isolate !important;
+  contain: layout style !important;
+}
+:host([hidden]) { display: none !important; }
+#sg-shell { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; width: 100%; margin: 0; padding: 0; border: 0; background: transparent; pointer-events: none; }
+#sg-panel { display: block; width: 100%; max-height: calc(100dvh - 104px); min-height: 0; margin: 0; padding: 0; overflow: hidden; pointer-events: auto; border: 1px solid #d8e0d8; border-radius: 18px; background: #f6f7f3; box-shadow: 0 16px 48px rgb(21 40 44 / 16%), 0 2px 8px rgb(21 40 44 / 6%); }
+#sg-panel[hidden] { display: none !important; }
+#sg-fab { all: initial; box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; flex: 0 0 46px; cursor: pointer; pointer-events: auto; background: #15282c; color: #f6f7f3; border: 1px solid rgb(246 247 243 / 12%); border-radius: 15px; box-shadow: 0 5px 18px rgb(21 40 44 / 18%); }
+#sg-fab svg { display: block; width: 42px; height: 42px; pointer-events: none; }
+#sg-fab:hover { box-shadow: 0 7px 22px rgb(21 40 44 / 25%); transform: translateY(-1px); }
+#sg-fab:focus-visible { outline: 2px solid #208a71; outline-offset: 4px; }
+#sg-fab[aria-expanded="true"] { border-color: #69ddc3; }
+@media (max-width: 430px) { :host { right: 12px !important; bottom: 16px !important; } }
+@media (max-height: 520px) {
+  :host { bottom: 12px !important; }
+  #sg-shell { gap: 7px; }
+  #sg-fab { width: 38px; height: 38px; flex-basis: 38px; border-radius: 12px; }
+  #sg-fab svg { width: 35px; height: 35px; }
+  #sg-panel { max-height: calc(100dvh - 68px); }
+  #sg-panel .vy-app[data-variant="floating"] .vy-workspace { max-height: calc(100dvh - 234px); }
+}
+@media (prefers-color-scheme: dark) { #sg-panel { border-color: #304346; background: #142124; box-shadow: 0 16px 48px rgb(0 0 0 / 27%), 0 2px 8px rgb(0 0 0 / 14%); } }
+@media (prefers-reduced-motion: no-preference) { #sg-fab { transition: transform .15s ease, box-shadow .15s ease; } }
