@@ -177,6 +177,8 @@
 .vy-app .vy-job-path > span:last-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
 .vy-app .vy-job-path .vy-icon { --vy-icon-size: 13px; }
 .vy-app .vy-job-progress-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--vy-muted); font-variant-numeric: tabular-nums; }
+.vy-app .vy-job-progress-details { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 10px; }
+.vy-app .vy-job-speed { white-space: nowrap; }
 .vy-app .vy-progress { height: 4px; overflow: hidden; margin-top: 5px; border-radius: 4px; background: var(--vy-soft); }
 .vy-app .vy-progress-fill { display: block; height: 100%; min-width: 3px; border-radius: inherit; background: var(--vy-accent); }
 .vy-app .vy-progress[data-indeterminate="true"] .vy-progress-fill { width: 28% !important; opacity: .5; }

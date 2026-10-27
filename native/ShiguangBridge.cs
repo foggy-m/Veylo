@@ -15,12 +15,12 @@ using System.Web.Script.Serialization;
 
 [assembly: System.Reflection.AssemblyTitle("Veylo")]
 [assembly: System.Reflection.AssemblyProduct("Veylo")]
-[assembly: System.Reflection.AssemblyVersion("1.7.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.7.0.0")]
+[assembly: System.Reflection.AssemblyVersion("1.7.2.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.7.2.0")]
 
 internal static class ShiguangBridge
 {
-    const string Version = "1.7.0";
+    const string Version = "1.7.2";
     const string CanceledError = "已取消下载。";
     const string LiveCapError = "直播录制已达到时长上限，未生成文件。";
     const string SponsorAll = "sponsor,selfpromo,interaction,intro,outro,preview,music_offtopic,filler";
@@ -103,7 +103,16 @@ internal static class ShiguangBridge
             }
             return 0;
         }
-        catch { return 1; }
+#if BRIDGE_TEST
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(error);
+#else
+        catch
+        {
+#endif
+            return 1;
+        }
     }
 
     static byte[] ReadExact(Stream stream, int size)
@@ -148,7 +157,7 @@ internal static class ShiguangBridge
     {
         bool cover = Flag(msg, "embedThumbnail"), chapters = Flag(msg, "splitChapters"), archive = Flag(msg, "downloadArchive");
         EnumOption(msg, "limitRate", "off", "off", "512K", "1M", "5M", "10M");
-        EnumOption(msg, "concurrentFragments", "1", "1", "4", "8", "16");
+        EnumOption(msg, "concurrentFragments", "auto", "auto", "1", "4", "8", "16");
         if (cover && Text(msg, "media", "video") == "audio-original") throw new InvalidOperationException("嵌入封面请改选视频、MP3 或 M4A。");
         if (chapters && (Text(msg, "section") != "" || Text(msg, "live", "off") != "off" || Text(msg, "media") == "audio-original"))
             throw new InvalidOperationException("按章节拆分不能与原音轨、时间片段或直播共用。");
@@ -157,7 +166,7 @@ internal static class ShiguangBridge
     static string PracticalKey(Dictionary<string, object> job)
     {
         return Json.Serialize(new object[] { Flag(job, "embedThumbnail"), Flag(job, "splitChapters"), Flag(job, "downloadArchive"),
-            Text(job, "limitRate", "off"), Text(job, "concurrentFragments", "1") });
+            Text(job, "limitRate", "off"), Text(job, "concurrentFragments", "auto") });
     }
     static string ArchivePath(Dictionary<string, object> job)
     {
@@ -414,6 +423,7 @@ internal static class ShiguangBridge
             string platform, url;
             try { url = Canonical(Text(job, "url"), StoredPlaylist(job), out platform); } catch { platform = ""; url = ""; }
             return new { ok = true, job = new { id = id, state = Text(job, "state"), percent = percent,
+                speedBytesPerSecond = DownloadSpeed(job),
                 downloadDir = Text(job, "downloadDir"), error = SafeError(Text(job, "error")), platform = platform,
                 url = url, title = SafeTitle(Text(job, "title")), media = Text(job, "media", "video"), audioQuality = StoredAudioQuality(job), files = SafeFiles(job),
                 sponsorblock = Text(job, "sponsorblock", "off"), section = Text(job, "section"), playlist = StoredPlaylist(job), items = Text(job, "items"),
@@ -796,7 +806,7 @@ static object OpenJobFile(Dictionary<string, object> msg)
                     { "downloadDir", dir }, { "part", part }, { "media", media }, { "audioQuality", audioQuality }, { "subtitles", subtitles }, { "subLangs", subLangs },
                     { "metadata", metadata }, { "sponsorblock", sponsorblock }, { "section", section }, { "playlist", playlist }, { "items", items },
                     { "embedThumbnail", Flag(msg, "embedThumbnail") }, { "splitChapters", Flag(msg, "splitChapters") }, { "downloadArchive", Flag(msg, "downloadArchive") },
-                    { "limitRate", Text(msg, "limitRate", "off") }, { "concurrentFragments", Text(msg, "concurrentFragments", "1") },
+                    { "limitRate", Text(msg, "limitRate", "off") }, { "concurrentFragments", Text(msg, "concurrentFragments", "auto") },
             {"live", live}, {"liveMaxMinutes", liveMaxMinutes}, {"fileCount", 0}, {"warnings", new List<string>()},
                     {"title", ""}, {"files", new List<string>()}, {"_fileKeys", new List<string>()}, {"_itemIds", new List<string>()},
                     { "cookieStatus", cookies.Count > 0 ? "signed-in" : "guest" },
@@ -968,7 +978,19 @@ static object OpenJobFile(Dictionary<string, object> msg)
         return new { ok = true, path = Path.GetFullPath(picked) };
     }
 
-    static List<string> DownloadArguments(Dictionary<string, object> job, string proxy, string cookieFile, string staging)
+    static int TransferConcurrency(Dictionary<string, object> job, Dictionary<string, object> config)
+    {
+        string selected = Text(job, "concurrentFragments", "auto");
+        if (selected != "auto") return int.Parse(selected, CultureInfo.InvariantCulture);
+        object value;
+        int count;
+        return config != null && config.TryGetValue("concurrent_fragments", out value)
+            && (value is int || value is long)
+            && int.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), out count) && count >= 1
+            ? Math.Min(16, count) : 4;
+    }
+
+    static List<string> DownloadArguments(Dictionary<string, object> job, string proxy, string cookieFile, string staging, Dictionary<string, object> config)
     {
         string platform;
         bool playlist = StoredPlaylist(job);
@@ -983,7 +1005,8 @@ static object OpenJobFile(Dictionary<string, object> msg)
         var args = new List<string> { "--ignore-config", playlist ? "--yes-playlist" : "--no-playlist", "--no-simulate", "--progress", "--newline", "--no-warnings", "--windows-filenames",
             "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3", "--ffmpeg-location", Path.Combine(AppDir, "bin", "ffmpeg"),
             "--paths", staging ?? Text(job, "downloadDir"), "--output", output,
-            "--progress-template", playlist ? "download:SGPROGRESS:%(info.playlist_index)s/%(info.n_entries)s:%(progress._percent_str)s" : "download:SGPROGRESS:%(progress._percent_str)s",
+            "--progress-template", (playlist ? "download:SGPROGRESS:%(info.playlist_index)s/%(info.n_entries)s:%(progress._percent_str)s" : "download:SGPROGRESS:%(progress._percent_str)s") + "|SPEED:%(progress.speed)s|STATUS:%(progress.status)s",
+            "--progress-template", "postprocess:SGPOSTPROCESS",
             "--print", "after_move:SGFILEJ:%(filepath)j", "--print", "after_move:SGTITLEJ:%(title)j",
             "--print", "after_move:SGSUBSJ:%(requested_subtitles)j" };
         if (playlist)
@@ -1029,7 +1052,8 @@ static object OpenJobFile(Dictionary<string, object> msg)
         }
         if (Flag(job, "downloadArchive")) args.AddRange(new[] { "--download-archive", Path.Combine(Jobs, Text(job, "id") + ".archive"), "--no-quiet" });
         if (Text(job, "limitRate", "off") != "off") args.AddRange(new[] { "--limit-rate", Text(job, "limitRate") });
-        if (Text(job, "concurrentFragments", "1") != "1") args.AddRange(new[] { "--concurrent-fragments", Text(job, "concurrentFragments") });
+        int fragments = TransferConcurrency(job, config);
+        if (fragments > 1) args.AddRange(new[] { "--concurrent-fragments", fragments.ToString(CultureInfo.InvariantCulture) });
         args.Add("--paths"); args.Add("temp:" + Path.Combine(Jobs, Text(job, "id") + ".temp"));
         args.Add("--proxy"); args.Add(proxy);
         if (cookieFile != "") { args.Add("--cookies"); args.Add(cookieFile); }
@@ -1268,6 +1292,32 @@ static object OpenJobFile(Dictionary<string, object> msg)
         return true;
     }
 
+    static bool UpdateProgress(Dictionary<string, object> job, string line, bool playlist)
+    {
+        if (!line.StartsWith("SGPROGRESS:", StringComparison.Ordinal) && line != "SGPOSTPROCESS") return false;
+        double percent;
+        if (ProgressValue(line, playlist, out percent)) job["percent"] = percent;
+        Match match = Regex.Match(line, @"\|SPEED:([^|]+)\|STATUS:downloading\z");
+        double speed;
+        job["speedBytesPerSecond"] = match.Success
+            && double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out speed)
+            && !double.IsNaN(speed) && !double.IsInfinity(speed) && speed >= 0 ? (object)speed : null;
+        job["speedUpdated"] = DateTime.UtcNow.Ticks;
+        SaveJob(job);
+        return true;
+    }
+
+    static double? DownloadSpeed(Dictionary<string, object> job)
+    {
+        object value, updated;
+        if (Text(job, "state") != "downloading" || !job.TryGetValue("speedBytesPerSecond", out value)
+            || !(value is int || value is long || value is double || value is decimal)
+            || !job.TryGetValue("speedUpdated", out updated) || !(updated is long)) return null;
+        double age = (DateTime.UtcNow.Ticks - (long)updated) / 10000000.0;
+        double speed = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+        return age >= 0 && age <= 5 && !double.IsNaN(speed) && !double.IsInfinity(speed) && speed >= 0 ? (double?)speed : null;
+    }
+
     static int LiveLimitSeconds(int minutes)
     {
 #if BRIDGE_TEST
@@ -1322,7 +1372,7 @@ static object OpenJobFile(Dictionary<string, object> msg)
                 job["files"] = new List<string>();
             }
             job["pid"] = Process.GetCurrentProcess().Id; job["state"] = "downloading"; SaveJob(job);
-            var args = DownloadArguments(job, proxy, cookieFile, staging);
+            var args = DownloadArguments(job, proxy, cookieFile, staging, cfg);
             SyncArchive(job, false);
             var sources = new List<string>();
             var encodedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1339,10 +1389,8 @@ static object OpenJobFile(Dictionary<string, object> msg)
                     lock (StateLock)
                     {
                         if (Flag(job, "downloadArchive") && e.Data.Contains("has already been recorded in the archive")) skippedArchive = true;
-                        double progress;
-                        if (ProgressValue(e.Data, playlist, out progress))
-                        { job["percent"] = progress; SaveJob(job); }
-                        else if (staging != null && (e.Data.StartsWith("SGFILEJ:") || e.Data.StartsWith("SGFILE:") || e.Data.StartsWith("SGCHAPTERSJ:")))
+                        if (UpdateProgress(job, e.Data, playlist)) return;
+                        if (staging != null && (e.Data.StartsWith("SGFILEJ:") || e.Data.StartsWith("SGFILE:") || e.Data.StartsWith("SGCHAPTERSJ:")))
                         {
                             try
                             {
@@ -1367,12 +1415,7 @@ static object OpenJobFile(Dictionary<string, object> msg)
                 };
                 proc.ErrorDataReceived += (s, e) => {
                     string line = e.Data ?? "";
-                    double progress;
-                    if (ProgressValue(line, playlist, out progress))
-                    {
-                        lock (StateLock) { job["percent"] = progress; SaveJob(job); }
-                        return;
-                    }
+                    lock (StateLock) { if (UpdateProgress(job, line, playlist)) return; }
                     if (line.IndexOf("login", StringComparison.OrdinalIgnoreCase) >= 0 || line.IndexOf("authenticate", StringComparison.OrdinalIgnoreCase) >= 0)
                         error = platform == "x"
                             ? "X 要求登录。请在 Tabbit 登录 X 后刷新独立的 X Cookie。"
@@ -1420,6 +1463,7 @@ static object OpenJobFile(Dictionary<string, object> msg)
                 else
                 {
                     proc.WaitForExit();
+                    lock (StateLock) { job["speedBytesPerSecond"] = null; SaveJob(job); }
                 }
                 if (canceled)
                 {
@@ -1520,7 +1564,7 @@ static object OpenJobFile(Dictionary<string, object> msg)
             catch (IOException) { if (attempt == 3) throw; Thread.Sleep(25 * (attempt + 1)); }
         }
     }
-    static void SaveJob(Dictionary<string, object> job) { job["updated"] = DateTime.UtcNow.Ticks; Atomic(JobFile(Text(job, "id")), Json.Serialize(job)); }
+    static void SaveJob(Dictionary<string, object> job) { if (Text(job, "state") != "downloading") job["speedBytesPerSecond"] = null; job["updated"] = DateTime.UtcNow.Ticks; Atomic(JobFile(Text(job, "id")), Json.Serialize(job)); }
     static double Age(Dictionary<string, object> job)
     {
         object v; return job.TryGetValue("updated", out v) ? (DateTime.UtcNow.Ticks - Convert.ToInt64(v)) / 10000000.0 : double.MaxValue;

@@ -15,12 +15,12 @@ using System.Web.Script.Serialization;
 
 [assembly: System.Reflection.AssemblyTitle("Veylo")]
 [assembly: System.Reflection.AssemblyProduct("Veylo")]
-[assembly: System.Reflection.AssemblyVersion("1.5.1.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.5.1.0")]
+[assembly: System.Reflection.AssemblyVersion("1.5.2.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.5.2.0")]
 
 internal static class BiliBridge
 {
-    const string Version = "1.5.1";
+    const string Version = "1.5.2";
     const string CanceledError = "已取消下载。";
     const int MaxMessage = 65536;
     const string ExtensionOrigin = "chrome-extension://ikaahmfclfkamdgikchmjnoalpklkddk/";
@@ -271,6 +271,7 @@ internal static class BiliBridge
             try { url = CanonicalDownload(Text(job, "url")); } catch { url = ""; }
             List<string> files = SafeFiles(job);
             return new { ok = true, job = new { id = id, state = Text(job, "state"), percent = percent,
+                speedBytesPerSecond = DownloadSpeed(job),
                 downloadDir = Text(job, "downloadDir"), error = SafeError(Text(job, "error")), platform = "bilibili",
                 url = url, title = SafeTitle(Text(job, "title")), media = Text(job, "media", "video"),
                 audioQuality = StoredAudioQuality(job), files = files, warnings = SafeWarnings(job),
@@ -278,6 +279,17 @@ internal static class BiliBridge
                 fileCount = StoredFileCount(job, files.Count) } };
         }
         throw new InvalidOperationException("不支持的桥接操作。");
+    }
+
+    static double? DownloadSpeed(Dictionary<string, object> job)
+    {
+        object value, updated;
+        if (Text(job, "state") != "downloading" || !job.TryGetValue("speedBytesPerSecond", out value)
+            || !(value is int || value is long || value is double || value is decimal)
+            || !job.TryGetValue("speedUpdated", out updated) || !(updated is long)) return null;
+        double age = (DateTime.UtcNow.Ticks - (long)updated) / 10000000.0;
+        double speed = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+        return age >= 0 && age <= 5 && !double.IsNaN(speed) && !double.IsInfinity(speed) && speed >= 0 ? (double?)speed : null;
     }
 
     static string BiliRoot()

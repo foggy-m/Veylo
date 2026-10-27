@@ -44,3 +44,5 @@ _archive*/
 # Local verification evidence
 .test-results/
 **/bridge-*/
+.build/
+_backups/

@@ -24,7 +24,7 @@ const nativeDownloadOptions = {
 };
 const downloadOptions = {
   ...nativeDownloadOptions, sponsorblock: 'off', section: '', playlist: false, items: '', live: 'off',
-  embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: '1'
+  embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: 'auto'
 };
 function event() {
   const listeners = [];

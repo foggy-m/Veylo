@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-BLOCKED_PARTS = {"tabbit_ud", "jobs", "archive-legacy", "fy-extension", "__pycache__", "startup-probe", "bounded-tests"}
+BLOCKED_PARTS = {"tabbit_ud", "jobs", "archive-legacy", "fy-extension", "__pycache__", "startup-probe", "bounded-tests", ".build", "_backups"}
 BLOCKED_SUFFIXES = {".exe", ".dll", ".log", ".pem", ".key", ".pfx", ".p12", ".zip", ".jsonl", ".pyc"}
 PATTERNS = {
     "private_key": rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",

@@ -9,14 +9,17 @@ r"""Bili23 无界面下载驱动（Veylo 本机桥接调用）。
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
+from queue import Empty, SimpleQueue
 import re
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+from threading import Event, Lock
 import time
 import traceback
 import uuid
@@ -24,8 +27,9 @@ from pathlib import Path
 
 FLUENT_PATHS = Path(__file__).resolve().parents[2] / "native" / "fluent_paths.json"
 
-CHUNK = 1 << 20  # 1 MiB
+CHUNK = 1 << 16  # 64 KiB keeps progress responsive on slower connections.
 RETRIES = 3
+RANGE_SIZE = 4 << 20
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 REFERER = "https://www.bilibili.com/"
@@ -69,13 +73,39 @@ class JobCanceled(RuntimeError):
     pass
 
 
+class RangeUnavailable(RuntimeError):
+    pass
+
+
 class Job:
     def __init__(self, path: Path):
         self.path = path
         self.data = json.loads(path.read_text(encoding="utf-8"))
         self._last_write = 0.0
+        self._speed_started = time.monotonic()
+        self._speed_bytes = 0
+
+    def start_transfer(self):
+        self._speed_started = time.monotonic()
+        self._speed_bytes = 0
+        self.save(speedBytesPerSecond=None)
+
+    def transfer_progress(self, size):
+        self._speed_bytes += size
+        now = time.monotonic()
+        elapsed = now - self._speed_started
+        if elapsed >= 1.0:
+            self.data.update(speedBytesPerSecond=self._speed_bytes / elapsed,
+                             speedUpdated=int(time.time() * 10_000_000) + 621355968000000000)
+            self._speed_started = now
+            self._speed_bytes = 0
+
+    def stop_transfer(self):
+        self.save(speedBytesPerSecond=None)
 
     def save(self, force=True, **kw):
+        if kw.get("state", self.data.get("state")) != "downloading":
+            kw["speedBytesPerSecond"] = None
         now = time.monotonic()
         if not force and now - self._last_write < 1.0:
             self.data.update(kw)
@@ -609,7 +639,125 @@ def resolve_entries(task, quality: str, media: str = "video"):
     return entries, media_type
 
 
+def transfer_workers():
+    """Reuse Bili23's per-file concurrency without changing its settings."""
+    try:
+        from util.common.config import config
+        value = config.get(config.download_thread)
+        return max(1, min(10, value)) if type(value) is int else 4
+    except (ImportError, AttributeError):
+        return 4
+
+
 def download_entry(entry, work: Path, job: Job, progress):
+    target = work / entry["file_name"]
+    total = int(entry.get("file_size") or 0)
+    workers = transfer_workers()
+    if total >= RANGE_SIZE * 2 and workers > 1 and not target.exists():
+        reported = [0]
+        def range_progress(delta):
+            reported[0] += delta
+            progress(delta)
+        try:
+            return download_entry_parallel(entry, work, job, range_progress, workers)
+        except JobCanceled:
+            raise
+        except Exception:
+            # Range support and connection limits differ between CDN nodes.
+            # Discard the private staging file and retain the ordinary path.
+            progress(-reported[0])
+    return download_entry_serial(entry, work, job, progress)
+
+
+def download_entry_parallel(entry, work: Path, job: Job, progress, workers):
+    from util.network.request import get_client
+
+    total = int(entry["file_size"])
+    target = work / entry["file_name"]
+    staging = work / (".veylo-range-" + uuid.uuid4().hex + ".part")
+    stopped = Event()
+    events = SimpleQueue()
+    client = get_client()
+    ranges = [(start, min(start + RANGE_SIZE, total) - 1) for start in range(0, total, RANGE_SIZE)]
+    # Schedule a bounded number of workers even for multi-hour media.
+    cursor = iter(ranges)
+    cursor_lock = Lock()
+
+    def worker():
+        with open(staging, "r+b") as handle:
+            while not stopped.is_set():
+                with cursor_lock:
+                    bounds = next(cursor, None)
+                if bounds is None:
+                    return
+                start, end = bounds
+                offset = start
+                for attempt in range(RETRIES):
+                    if stopped.is_set():
+                        return
+                    try:
+                        headers = {"User-Agent": UA, "Referer": REFERER, "Range": f"bytes={offset}-{end}"}
+                        with client.stream("GET", entry["url"], headers=headers, timeout=10) as response:
+                            response.raise_for_status()
+                            match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", response.headers.get("Content-Range", ""))
+                            if response.status_code != 206 or not match or tuple(map(int, match.groups())) != (offset, end, total):
+                                raise RangeUnavailable("服务器未返回请求的媒体分段。")
+                            handle.seek(offset)
+                            for chunk in response.iter_bytes(CHUNK):
+                                if stopped.is_set():
+                                    return
+                                if len(chunk) > end - offset + 1:
+                                    raise ValueError("媒体分段大小无效。")
+                                handle.write(chunk)
+                                offset += len(chunk)
+                                events.put(len(chunk))
+                        if offset != end + 1:
+                            raise ValueError("媒体分段不完整。")
+                        break
+                    except RangeUnavailable:
+                        raise
+                    except Exception:
+                        if attempt == RETRIES - 1:
+                            raise
+                        if stopped.wait(.5 * (attempt + 1)):
+                            return
+
+    job.start_transfer()
+    try:
+        with open(staging, "wb") as handle:
+            handle.truncate(total)
+        with ThreadPoolExecutor(max_workers=min(workers, len(ranges))) as pool:
+            futures = [pool.submit(worker) for _ in range(min(workers, len(ranges)))]
+            try:
+                while True:
+                    for future in futures:
+                        if future.done():
+                            future.result()
+                    delta = 0
+                    try:
+                        delta = events.get(timeout=.1)
+                        while True:
+                            delta += events.get_nowait()
+                    except Empty:
+                        pass
+                    # Only this thread touches the job file and progress closure.
+                    if delta:
+                        job.transfer_progress(delta)
+                    progress(delta)
+                    if all(future.done() for future in futures) and events.empty():
+                        break
+            finally:
+                stopped.set()
+            for future in futures:
+                future.result()
+        os.replace(staging, target)
+    finally:
+        stopped.set()
+        staging.unlink(missing_ok=True)
+        job.stop_transfer()
+
+
+def download_entry_serial(entry, work: Path, job: Job, progress):
     import httpx
     from util.network.request import get_client
 
@@ -623,16 +771,21 @@ def download_entry(entry, work: Path, job: Job, progress):
             headers = {"User-Agent": UA, "Referer": REFERER}
             if done:
                 headers["Range"] = "bytes=%d-" % done
-            with client.stream("GET", entry["url"], headers=headers, timeout=60) as response:
-                response.raise_for_status()
-                mode = "ab" if (done and response.status_code == 206) else "wb"
-                if mode == "wb":
-                    done = 0
-                with open(target, mode) as handle:
-                    for chunk in response.iter_bytes(CHUNK):
-                        handle.write(chunk)
-                        done += len(chunk)
-                        progress(len(chunk))
+            job.start_transfer()
+            try:
+                with client.stream("GET", entry["url"], headers=headers, timeout=60) as response:
+                    response.raise_for_status()
+                    mode = "ab" if (done and response.status_code == 206) else "wb"
+                    if mode == "wb":
+                        done = 0
+                    with open(target, mode) as handle:
+                        for chunk in response.iter_bytes(CHUNK):
+                            handle.write(chunk)
+                            done += len(chunk)
+                            job.transfer_progress(len(chunk))
+                            progress(len(chunk))
+            finally:
+                job.stop_transfer()
             if total and done < total:
                 raise RuntimeError("下载的数据不完整（%d/%d）" % (done, total))
             return

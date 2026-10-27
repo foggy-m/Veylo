@@ -101,6 +101,41 @@ function setup(initial = {}, options = {}) {
   let cases = 0;
   const test = async (name, work) => { await work(); cases++; console.log('PASS ' + name); };
   const env = setup({ sg_settings: { dir: 'default', quality: '720', qualityBili: '32', recentDirs: ['D:\\Old'] } });
+  await test('download speed is validated, replaced on every poll and cleared on disconnection or completion', async () => {
+    const speedEnv = setup();
+    const accepted = await speedEnv.send({ type: 'sg-deliver', mode: 'direct', url: BILI });
+    const nativeJob = speedEnv.jobs.get(accepted.jobId);
+    const stored = () => speedEnv.db.sg_history_v2.find(job => job.id === accepted.jobId);
+    for (const speed of [0, 512, 2.4 * 1024 ** 2, -1, '1024', null, undefined]) {
+      nativeJob.speedBytesPerSecond = speed;
+      await speedEnv.send({ type: 'sg-history-refresh' });
+      assert.equal(stored().speedBytesPerSecond, typeof speed === 'number' && speed >= 0 ? speed : null);
+    }
+    nativeJob.speedBytesPerSecond = 1024;
+    await speedEnv.send({ type: 'sg-history-refresh' });
+    speedEnv.disconnect(true);
+    await speedEnv.send({ type: 'sg-history-refresh' });
+    assert.equal(stored().speedBytesPerSecond, null);
+    assert.equal(stored().state, 'downloading');
+    const completeEnv = setup();
+    const complete = await completeEnv.send({ type: 'sg-deliver', mode: 'direct', url: BILI });
+    Object.assign(completeEnv.jobs.get(complete.jobId), { state: 'completed', speedBytesPerSecond: 1024 });
+    await completeEnv.send({ type: 'sg-history-refresh' });
+    assert.equal(completeEnv.db.sg_history_v2.find(job => job.id === complete.jobId).speedBytesPerSecond, null);
+  });
+  await test('automatic fragment concurrency uses host defaults, explicit single concurrency is sent and retained on retry', async () => {
+    const auto = setup();
+    assert.equal((await auto.send({ type: 'sg-settings-get' })).settings.concurrentFragments, 'auto');
+    await auto.send({ type: 'sg-deliver', mode: 'direct', url: YOUTUBE });
+    assert.equal('concurrentFragments' in auto.nativeCalls.at(-1).message, false);
+    const explicit = setup({ sg_settings: { concurrentFragments: '1' } });
+    const accepted = await explicit.send({ type: 'sg-deliver', mode: 'direct', url: YOUTUBE });
+    assert.equal(explicit.nativeCalls.at(-1).message.concurrentFragments, '1');
+    Object.assign(explicit.db.sg_history_v2[0], { state: 'failed' });
+    await explicit.send({ type: 'sg-settings-set', settings: { concurrentFragments: 'auto' } });
+    await explicit.send({ type: 'sg-job-retry', platform: 'youtube', jobId: accepted.jobId });
+    assert.equal(explicit.nativeCalls.at(-1).message.concurrentFragments, '1');
+  });
   await test('old settings migrate without losing selected qualities or folders', async () => {
     const result = await env.send({ type: 'sg-settings-get' });
     assert.equal(result.settings.media, 'video');

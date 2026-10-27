@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Veylo — Video Downloader",
   "short_name": "Veylo",
-  "version": "2.4.2",
+  "version": "2.4.4",
   "description": "Video, your way. 下载 YouTube、X 与哔哩哔哩视频或音频；本机保存、字幕、任务记录与失败重试。",
   "permissions": [
     "storage",

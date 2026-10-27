@@ -7,7 +7,7 @@ var SGUi = (() => {
     dir: 'default', recentDirs: [], quality: 'best', qualityBili: 'best', part: 'current',
     media: 'video', audioQuality: 'auto', subtitles: 'off', subLangs: 'zh.*,en', metadata: false, notify: false, theme: 'auto',
     sponsorblock: 'off', danmaku: 'off', biliSubtitles: 'off',
-    embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: '1'
+    embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: 'auto'
   });
   const AUDIO_QUALITY = ['auto', '320', '256', '192', '128'];
   const SPONSORBLOCK = ['off', 'sponsor', 'all'];
@@ -91,7 +91,7 @@ var SGUi = (() => {
       if (key === 'recentDirs') result[key] = Array.isArray(value) ? [...new Set(value.filter(path => typeof path === 'string' && path && path !== 'default'))].slice(0, 20) : [];
       else if (['metadata', 'notify', 'embedThumbnail', 'splitChapters', 'downloadArchive'].includes(key)) result[key] = value === true;
       else if (key === 'limitRate') result[key] = ['off', '512K', '1M', '5M', '10M'].includes(value) ? value : 'off';
-      else if (key === 'concurrentFragments') result[key] = ['1', '4', '8', '16'].includes(value) ? value : '1';
+      else if (key === 'concurrentFragments') result[key] = ['auto', '1', '4', '8', '16'].includes(value) ? value : 'auto';
       else if (key === 'media') result[key] = ['video', 'audio-original', 'audio-mp3', 'audio-m4a'].includes(value) ? value : 'video';
       else if (key === 'audioQuality') result[key] = AUDIO_QUALITY.includes(value) ? value : 'auto';
       else if (key === 'subtitles') result[key] = ['off', 'manual', 'auto'].includes(value) ? value : 'off';
@@ -178,7 +178,7 @@ var SGUi = (() => {
                 <label class="vy-toggle-row"><span><span class="vy-option-title">按章节拆分</span><span class="vy-option-description">按源视频章节另存多个文件，并保留完整文件；没有章节时保留完整文件。</span></span><input id="vy-split-chapters" type="checkbox" role="switch"></label>
                 <label class="vy-toggle-row"><span><span class="vy-option-title">防止重复下载</span><span class="vy-option-description">按视频 ID、保存目录和输出选项记忆成功下载；清除任务记录后仍生效。</span></span><input id="vy-download-archive" type="checkbox" role="switch"></label>
                 <div class="vy-option-row"><label for="vy-limit-rate">下载限速</label><div class="vy-select-wrap"><select id="vy-limit-rate"><option value="off">不限速</option><option value="512K">512 KiB/s</option><option value="1M">1 MiB/s</option><option value="5M">5 MiB/s</option><option value="10M">10 MiB/s</option></select>${icon('chevron-down', 14)}</div></div>
-                <div class="vy-option-row"><label for="vy-concurrent-fragments">并发分片</label><div class="vy-select-wrap"><select id="vy-concurrent-fragments"><option value="1">1（默认）</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>${icon('chevron-down', 14)}</div></div>
+                <div class="vy-option-row"><label for="vy-concurrent-fragments">并发分片</label><div class="vy-select-wrap"><select id="vy-concurrent-fragments"><option value="auto">自动（跟随本机）</option><option value="1">1（单连接）</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>${icon('chevron-down', 14)}</div></div>
                 <p id="vy-practical-note" class="vy-option-note">这些选项用于 YouTube / X。分片并发仅对支持的 DASH / HLS 源生效；限速按下载连接计算。</p>
               </div>
               <div id="vy-danmaku-row" class="vy-option-row" hidden><label for="vy-danmaku">弹幕</label><div class="vy-select-wrap"><select id="vy-danmaku" aria-describedby="vy-bili-extras-note vy-update-note"><option value="off">不下载弹幕</option><option value="ass">ASS 弹幕</option></select>${icon('chevron-down', 14)}</div></div>
@@ -614,7 +614,17 @@ var SGUi = (() => {
         const finite = typeof job.percent === 'number' && Number.isFinite(job.percent);
         const percent = finite ? Math.max(0, Math.min(100, Math.round(job.percent))) : 0;
         const progressText = createElement('div', 'vy-job-progress-label');
-        progressText.append(createElement('span', '', canceling ? '正在取消，等待本机内核停止' : job.state === 'queued' ? '等待本机内核开始' : finite ? '正在保存内容' : '正在连接与准备文件'), createElement('span', '', canceling ? '取消中' : job.state === 'queued' ? '排队中' : finite ? `${percent}%` : '准备中'));
+        const details = createElement('span', 'vy-job-progress-details');
+        if (!canceling && job.state === 'downloading' && !job.connectionError
+            && Number.isFinite(job.speedBytesPerSecond) && job.speedBytesPerSecond >= 0) {
+          const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+          const unit = Math.min(units.length - 1, Math.floor(Math.log(Math.max(1, job.speedBytesPerSecond)) / Math.log(1024)));
+          const speed = createElement('span', 'vy-job-speed', `${(job.speedBytesPerSecond / 1024 ** unit).toFixed(unit ? 1 : 0)} ${units[unit]}`);
+          speed.setAttribute('aria-label', `下载速率 ${speed.textContent}`);
+          details.appendChild(speed);
+        }
+        details.appendChild(createElement('span', '', canceling ? '取消中' : job.state === 'queued' ? '排队中' : finite ? `${percent}%` : '准备中'));
+        progressText.append(createElement('span', '', canceling ? '正在取消，等待本机内核停止' : job.state === 'queued' ? '等待本机内核开始' : finite ? '正在保存内容' : '正在连接与准备文件'), details);
         const progress = createElement('div', 'vy-progress');
         progress.setAttribute('role', 'progressbar');
         progress.setAttribute('aria-label', `${job.title || labelFor(job.platform)}下载进度`);
@@ -833,7 +843,7 @@ var SGUi = (() => {
           splitChapters: directMode && info.platform !== 'bili' && supports('x', 'chapters') && settings.media !== 'audio-original' && !form.section && settings.splitChapters,
           downloadArchive: directMode && info.platform !== 'bili' && supports('x', 'archive') && settings.downloadArchive,
           limitRate: directMode && info.platform !== 'bili' && supports('x', 'transfer') ? settings.limitRate : 'off',
-          concurrentFragments: directMode && info.platform !== 'bili' && supports('x', 'transfer') ? settings.concurrentFragments : '1'
+          concurrentFragments: directMode && info.platform !== 'bili' && supports('x', 'transfer') ? settings.concurrentFragments : 'auto'
         };
         if (state.title && state.titleUrl === info.url) payload.title = state.title;
         const result = await request(payload);

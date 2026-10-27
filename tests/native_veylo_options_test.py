@@ -329,7 +329,7 @@ class FixtureDirectory(tempfile.TemporaryDirectory):
 
 
 FEATURES = ["cancel", "sponsorblock", "sections", "playlist", "live", "pick-folder-initial", "login-status", "thumbnail", "chapters", "archive", "transfer", "open-file"]
-STATUS_KEYS = {"id", "state", "percent", "downloadDir", "error", "platform", "url", "title", "media", "audioQuality", "files",
+STATUS_KEYS = {"id", "state", "percent", "speedBytesPerSecond", "downloadDir", "error", "platform", "url", "title", "media", "audioQuality", "files",
                "sponsorblock", "section", "playlist", "items", "live", "fileCount", "warnings"}
 SB_ALL = "sponsor,selfpromo,interaction,intro,outro,preview,music_offtopic,filler"
 PLAYLIST = "https://www.youtube.com/playlist?list=PLsynthetic0001"
@@ -675,7 +675,7 @@ def feature_tests(exe, env, app, native, downloads, fixture, accept, invocation,
     check("--yes-playlist" in args and "--no-playlist" not in args and arg(args, "--playlist-items") == "1-200"
           and arg(args, "--max-downloads") == "200" and "--ignore-errors" in args, "playlist caps/flags")
     check(arg(args, "--output") == "%(playlist_title).80B/%(playlist_index)03d - %(title).120B [%(id)s].%(ext)s", "playlist template")
-    check(arg(args, "--progress-template") == "download:SGPROGRESS:%(info.playlist_index)s/%(info.n_entries)s:%(progress._percent_str)s",
+    check(arg(args, "--progress-template") == "download:SGPROGRESS:%(info.playlist_index)s/%(info.n_entries)s:%(progress._percent_str)s|SPEED:%(progress.speed)s|STATUS:%(progress.status)s",
           "playlist progress template")
     check("playlist:SGPLTITLEJ:%(title)j" in prints(args) and args[-1] == PLAYLIST, "playlist title print and URL")
     check("before_dl:SGIDJ:%(id)j" in prints(args), "playlist item IDs requested before downloads for owned cancel cleanup")
@@ -943,17 +943,17 @@ def main():
             return json.loads(result.stdout)
 
         ping = call(exe, {"action": "ping"}, env)
-        check(ping["version"] == "1.7.0" and ping["engineAvailable"] and ping["appRoot"] == str(app), "test ping/version")
+        check(ping["version"] == "1.7.2" and ping["engineAvailable"] and ping["appRoot"] == str(app), "test ping/version")
         check(ping.get("audioQualityOptions") == ["auto", "320", "256", "192", "128"], "explicit audio capability advertised")
         check(ping.get("mediaOptions") == ["video", "audio-original", "audio-mp3", "audio-m4a"], "original audio capability advertised")
         prod_ping = call(release_runner, {"action": "ping"}, release_env)
-        check(prod_ping["version"] == "1.7.0" and prod_ping["appRoot"] == str(app) and prod_ping["engineAvailable"], "isolated release ping/version/root/engine")
+        check(prod_ping["version"] == "1.7.2" and prod_ping["appRoot"] == str(app) and prod_ping["engineAvailable"], "isolated release ping/version/root/engine")
         check(prod_ping.get("mediaOptions") == ping["mediaOptions"], "release original capability matches test host")
         check(ping.get("features") == FEATURES and prod_ping.get("features") == FEATURES, "exact ordered feature list (test + release)")
         check(ping.get("login") == {"youtube": "guest", "x": "guest"} and prod_ping.get("login") == {"youtube": "guest", "x": "guest"}, "login status shape")
         check(call(release_runner, {"action": "test-pick-folder-initial", "initialDir": "C:\\"}, release_env).get("ok") is False, "test-only action absent from release")
         info = release_info("metadata")
-        check(info["version"] == "1.7.0.0" and info["fileVersion"] == "1.7.0.0", "release assembly/file version")
+        check(info["version"] == "1.7.2.0" and info["fileVersion"] == "1.7.2.0", "release assembly/file version")
         check(info["dialogMethods"] == ["Show", "SetFileTypes", "SetFileTypeIndex", "GetFileTypeIndex", "Advise", "Unadvise", "SetOptions", "GetOptions",
                                          "SetDefaultFolder", "SetFolder", "GetFolder", "GetCurrentSelection", "SetFileName", "GetFileName", "SetTitle",
                                          "SetOkButtonLabel", "SetFileNameLabel", "GetResult", "AddPlace", "SetDefaultExtension", "Close", "SetClientGuid", "ClearClientData", "SetFilter"]

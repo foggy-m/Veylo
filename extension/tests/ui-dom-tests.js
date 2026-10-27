@@ -456,6 +456,29 @@
         assert($('active-count').textContent === '2', 'Active task count incorrect');
       });
 
+      await test('下载速率自动换算单位；零速率有效，未知与非下载状态不显示', async () => {
+        const cases = [
+          { speed: 0, text: '0 B/s' }, { speed: 512, text: '512 B/s' },
+          { speed: 1024, text: '1.0 KB/s' }, { speed: 2.4 * 1024 ** 2, text: '2.4 MB/s' },
+          { speed: 1024 ** 3, text: '1.0 GB/s' },
+          { speed: null }, {}, { speed: -1 }, { speed: '1024' },
+          { speed: 1024, state: 'queued' }, { speed: 1024, state: 'completed' },
+          { speed: 1024, state: 'failed' }, { speed: 1024, state: 'canceled' },
+          { speed: 1024, cancelRequested: true }, { speed: 1024, connectionError: '离线' }
+        ];
+        const { $ } = await setup({ jobs: cases.map((item, index) => ({
+          id: `speed-${index}`, platform: 'bili', url: w.VeyloFixture.URLS.bili,
+          state: item.state || 'downloading', percent: 46, speedBytesPerSecond: item.speed,
+          cancelRequested: item.cancelRequested, connectionError: item.connectionError
+        })) });
+        for (const [index, item] of cases.entries()) {
+          const card = $('jobs').querySelector(`[data-job="bili:speed-${index}"]`);
+          const speed = card.querySelector('.vy-job-speed');
+          assert((speed?.textContent || '') === (item.text || ''), `Incorrect speed case ${index}`);
+          if (speed) assert(speed.getAttribute('aria-label').includes(item.text), 'Speed accessible name missing');
+        }
+      });
+
       await test('历史音质来自原请求；旧记录和非法音质显示内核默认，不读取当前偏好', async () => {
         const jobs = [
           { id: 'requested-mp3', media: 'audio-mp3', audioQuality: '320', request: { audioQuality: '256' }, label: 'MP3 · 256 kbps' },

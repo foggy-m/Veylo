@@ -271,7 +271,7 @@ async function check(name, body) {
       type: 'sg-deliver', url: xUrl, mode: 'direct', quality: '720', part: 'current', dir: 'default', media: 'video',
       audioQuality: 'auto', subtitles: 'off', subLangs: 'zh.*,en', metadata: false,
       sponsorblock: 'off', section: '', live: 'off', liveMinutes: '240', playlist: false, items: '', danmaku: 'off', biliSubtitles: 'off',
-      embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: '1'
+      embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: 'auto'
     });
     assert.equal(h.get('vy-login'), null, 'Retired login badge must not be rendered');
     assert.match(h.get('vy-jobs').textContent, /42%/);

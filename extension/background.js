@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   dir: 'default', recentDirs: [], quality: 'best', qualityBili: 'best', part: 'current',
   media: 'video', audioQuality: 'auto', subtitles: 'off', subLangs: 'zh.*,en', metadata: false, notify: false, theme: 'auto',
   sponsorblock: 'off', danmaku: 'off', biliSubtitles: 'off', liveMinutes: '240',
-  embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: '1'
+  embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: 'auto'
 });
 const SPONSORBLOCK = ['off', 'sponsor', 'all'];
 const DANMAKU = ['off', 'ass'];
@@ -81,7 +81,7 @@ function safeSettings(value) {
     part: ['current', 'all', 'collection'], media: ['video', 'audio-original', 'audio-mp3', 'audio-m4a'], audioQuality: ['auto', '320', '256', '192', '128'],
     subtitles: ['off', 'manual', 'auto'], subLangs: ['zh.*,en', 'zh.*', 'en'], theme: ['auto', 'light', 'dark'],
     sponsorblock: SPONSORBLOCK, danmaku: DANMAKU, biliSubtitles: BILI_SUBTITLES, liveMinutes: ['240'],
-    limitRate: ['off', '512K', '1M', '5M', '10M'], concurrentFragments: ['1', '4', '8', '16']
+    limitRate: ['off', '512K', '1M', '5M', '10M'], concurrentFragments: ['auto', '1', '4', '8', '16']
   };
   for (const [key, values] of Object.entries(choices)) if (values.includes(raw[key])) out[key] = raw[key];
   out.metadata = raw.metadata === true;
@@ -183,7 +183,7 @@ async function getHistory() {
 const LEGACY_REQUEST = Object.freeze({
   audioQuality: 'auto', sponsorblock: 'off', danmaku: 'off', biliSubtitles: 'off',
   section: '', items: '', playlist: false, live: 'off', liveMinutes: '240',
-  embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: '1'
+  embedThumbnail: false, splitChapters: false, downloadArchive: false, limitRate: 'off', concurrentFragments: 'auto'
 });
 
 function playlistId(info) {
@@ -214,7 +214,7 @@ function requestOptions(info, raw) {
   for (const key of ['embedThumbnail', 'splitChapters', 'downloadArchive']) {
     if (raw[key] !== undefined && typeof raw[key] !== 'boolean') throw new Error('不支持的下载选项：' + key);
   }
-  for (const [key, values] of [['limitRate', ['off', '512K', '1M', '5M', '10M']], ['concurrentFragments', ['1', '4', '8', '16']]]) {
+  for (const [key, values] of [['limitRate', ['off', '512K', '1M', '5M', '10M']], ['concurrentFragments', ['auto', '1', '4', '8', '16']]]) {
     if (raw[key] !== undefined && !values.includes(raw[key])) throw new Error('不支持的下载选项：' + key);
   }
   const youtube = info.platform === 'youtube';
@@ -244,7 +244,7 @@ function requestOptions(info, raw) {
     splitChapters: info.platform !== 'bili' && settings.splitChapters,
     downloadArchive: info.platform !== 'bili' && settings.downloadArchive,
     limitRate: info.platform !== 'bili' ? settings.limitRate : 'off',
-    concurrentFragments: info.platform !== 'bili' ? settings.concurrentFragments : '1'
+    concurrentFragments: info.platform !== 'bili' ? settings.concurrentFragments : 'auto'
   };
 }
 
@@ -265,7 +265,7 @@ function nativeDownload(info, url, options) {
     ...(options.splitChapters ? { splitChapters: true } : {}),
     ...(options.downloadArchive ? { downloadArchive: true } : {}),
     ...(options.limitRate !== 'off' ? { limitRate: options.limitRate } : {}),
-    ...(options.concurrentFragments !== '1' ? { concurrentFragments: options.concurrentFragments } : {}),
+    ...(options.concurrentFragments !== 'auto' ? { concurrentFragments: options.concurrentFragments } : {}),
     ...(options.sponsorblock !== 'off' ? { sponsorblock: options.sponsorblock } : {}),
     ...(options.section ? { section: options.section } : {}),
     ...(options.playlist ? { playlist: true, items: options.items } : {})
@@ -278,7 +278,7 @@ function requiredFeatures(info, options) {
   }
   return [options.sponsorblock !== 'off' && 'sponsorblock', options.section && 'sections', options.playlist && 'playlist',
     options.embedThumbnail && 'thumbnail', options.splitChapters && 'chapters', options.downloadArchive && 'archive',
-    (options.limitRate !== 'off' || options.concurrentFragments !== '1') && 'transfer'].filter(Boolean);
+    (options.limitRate !== 'off' || options.concurrentFragments !== 'auto') && 'transfer'].filter(Boolean);
 }
 
 function hostFeatures(capability) {
@@ -384,6 +384,8 @@ async function pickFolder(host, initialDir) {
 function safeJobUpdate(job) {
   if (!job || !['queued', 'downloading', 'completed', 'failed', 'canceled'].includes(job.state)) throw new Error('任务状态无效');
   const result = { state: job.state, updatedAt: Date.now(), connectionError: '' };
+  result.speedBytesPerSecond = job.state === 'downloading' && Number.isFinite(job.speedBytesPerSecond) && job.speedBytesPerSecond >= 0
+    ? job.speedBytesPerSecond : null;
   if (Number.isFinite(job.percent)) result.percent = Math.max(0, Math.min(100, job.percent));
   if (typeof job.error === 'string') result.error = job.error.slice(0, 600);
   if (pathText(job.downloadDir) && job.downloadDir) result.downloadDir = job.downloadDir;
@@ -405,7 +407,7 @@ async function refreshHistory() {
         return { key: jobKey(j), patch: safeJobUpdate(response.job) };
       } catch (e) {
         // A disconnected browser host does not mean a detached download stopped.
-        return { key: jobKey(j), patch: { connectionError: titleText(e.message) } };
+        return { key: jobKey(j), patch: { connectionError: titleText(e.message), speedBytesPerSecond: null } };
       }
     }));
     const notifications = [];

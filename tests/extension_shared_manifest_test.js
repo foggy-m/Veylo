@@ -93,7 +93,7 @@ check('job messages distinguish progress, completion, failure and cancellation',
 const manifest = JSON.parse(read('manifest.json'));
 check('MV3 permissions and minimum version cover used APIs without broad permissions', () => {
   assert.equal(manifest.manifest_version, 3);
-  assert.equal(manifest.version, '2.4.2');
+  assert.equal(manifest.version, '2.4.4');
   assert.ok(Number(manifest.minimum_chrome_version) >= 116);
   assert.deepEqual([...manifest.permissions].sort(), ['storage', 'activeTab', 'clipboardWrite', 'offscreen', 'nativeMessaging', 'contextMenus', 'alarms'].sort());
   assert.deepEqual(manifest.optional_permissions, ['notifications']);
