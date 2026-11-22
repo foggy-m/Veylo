@@ -384,6 +384,7 @@ internal static class ShiguangBridge
     {
         string action = Text(msg, "action");
         if (action == "ping") return new { ok = true, version = Version, appRoot = AppDir ?? "", engineAvailable = UsableApp(AppDir),
+            engineSource = Engine() == Path.Combine(AppDir ?? "", "bin", "yt-dlp", "yt-dlp.exe") ? "bundled" : "managed",
             audioQualityOptions = new[] { "auto", "320", "256", "192", "128" },
             mediaOptions = new[] { "video", "audio-original", "audio-mp3", "audio-m4a" },
             features = new[] { "cancel", "sponsorblock", "sections", "playlist", "live", "pick-folder-initial", "login-status", "thumbnail", "chapters", "archive", "transfer", "open-file" },
@@ -469,13 +470,59 @@ internal static class ShiguangBridge
         return !string.IsNullOrEmpty(root) && File.Exists(Path.Combine(root, "bin", "yt-dlp", "yt-dlp.exe"))
             && File.Exists(Path.Combine(root, "bin", "ffmpeg", "ffmpeg.exe"));
     }
-    static string Engine() { return Path.Combine(AppDir ?? "", "bin", "yt-dlp", "yt-dlp.exe"); }
+    static string Engine()
+    {
+        var bundled = Path.Combine(AppDir ?? "", "bin", "yt-dlp", "yt-dlp.exe");
+#if !BRIDGE_TEST
+        try
+        {
+            string app = Path.GetDirectoryName(Home);
+            string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Veylo");
+            if (!string.Equals(Path.GetDirectoryName(app), root, StringComparison.OrdinalIgnoreCase) ||
+                !Regex.IsMatch(Path.GetFileName(app), @"\Aapp-\d+\.\d+\.\d+\z")) return bundled;
+            string selection = Path.Combine(Home, "yt-dlp-version.txt");
+            if (!File.Exists(selection) || (File.GetAttributes(selection) & FileAttributes.ReparsePoint) != 0) return bundled;
+            string chosen = File.ReadAllText(selection).Trim();
+            DateTime date;
+            if (!DateTime.TryParseExact(chosen, "yyyy.MM.dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date)) return bundled;
+            string vendor = LocalDirectory(Path.Combine(root, "vendor", "yt-dlp-" + chosen));
+            string candidate = Path.Combine(vendor, "yt-dlp.exe");
+            if (File.Exists(candidate) && (File.GetAttributes(candidate) & FileAttributes.ReparsePoint) == 0) return candidate;
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (InvalidOperationException) { }
+        catch (ArgumentException) { }
+#endif
+        return bundled;
+    }
+
+    static string SettingsDirectory()
+    {
+#if !BRIDGE_TEST
+        try
+        {
+            string paths = Path.Combine(Home, "fluent_paths.json");
+            if (File.Exists(paths))
+            {
+                var data = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(paths, Encoding.UTF8));
+                string raw = data == null ? "" : Text(data, "fluent_data_root");
+                if (raw != "") return LocalDirectory(raw);
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (InvalidOperationException) { }
+        catch (ArgumentException) { }
+#endif
+        return AppDir;
+    }
 
     static Dictionary<string, object> ReadFluentSettings()
     {
         try
         {
-            var settings = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(AppDir, "config.json"), Encoding.UTF8));
+            var settings = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(SettingsDirectory(), "config.json"), Encoding.UTF8));
             if (settings == null) throw new InvalidOperationException(ConfigError);
             return settings;
         }

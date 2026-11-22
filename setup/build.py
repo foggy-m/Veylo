@@ -23,7 +23,7 @@ RUNTIME = {
     'extension/shared.js', 'extension/ui.css', 'extension/ui.js',
     'extension/icons/icon16.png', 'extension/icons/icon32.png', 'extension/icons/icon48.png',
     'extension/icons/icon64.png', 'extension/icons/icon128.png', 'extension/icons/logo.png',
-    'bilibili/driver/bd_driver.py', 'setup/GETTING-STARTED.txt',
+    'bilibili/driver/bd_driver.py', 'setup/GETTING-STARTED.txt', 'setup/bili-probe.py',
 }
 
 
@@ -114,6 +114,14 @@ def main():
         OUTPUT.write_bytes(binary)
     digest = hashlib.sha256(binary).hexdigest()
     (DIST / 'SHA256SUMS.txt').write_text(f'{digest}  {OUTPUT.name}\n', encoding='ascii')
+    dependencies = json.loads((HERE / 'dependencies.json').read_text(encoding='utf-8'))
+    catalog = {'Schema': 1, 'YouTubeBridge': '1.7.3', 'BiliBridge': '1.5.3',
+               'Fluent': dependencies['fluent'], 'Bili': dependencies['bili']}
+    for name in ('Fluent', 'Bili'):
+        component = catalog[name]
+        catalog[name] = {key[:1].upper() + key[1:]: value for key, value in component.items()
+                         if key in {'name', 'version', 'filename', 'size', 'sha256', 'url'}}
+    (DIST / 'Veylo-verified-components.json').write_text(json.dumps(catalog, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'file': OUTPUT.name, 'bytes': len(binary), 'sha256': digest, 'embeddedFiles': len(payload)}))
 
 

@@ -60,6 +60,20 @@ namespace VeyloSetup
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
 
+        public static void CopyAtomic(string source, string path)
+        {
+            PlainPath(path);
+            string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (var input = File.OpenRead(source))
+                using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write))
+                    input.CopyTo(output);
+                Replace(temporary, path);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
+
         private static void Replace(string temporary, string destination)
         {
             if (File.Exists(destination)) File.Replace(temporary, destination, null);

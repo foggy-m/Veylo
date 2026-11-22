@@ -1,6 +1,7 @@
 {
   "fluent": {
     "name": "FluentYTDL 3.7.6 full (Windows x64)",
+    "version": "3.7.6",
     "filename": "FluentYTDL-3.7.6-win64-full.7z",
     "url": "https://github.com/SakuraForgot/FluentYTDL/releases/download/v3.7.6/FluentYTDL-3.7.6-win64-full.7z",
     "size": 215695475,
@@ -9,6 +10,7 @@
   },
   "bili": {
     "name": "Bili23-Downloader 2.14.0 portable (Windows x64)",
+    "version": "2.14.0",
     "filename": "Bili23-Downloader_2.14.0_windows_x64_portable.zip",
     "url": "https://github.com/ScottSloan/Bili23-Downloader/releases/download/v2.14.0/Bili23-Downloader_2.14.0_windows_x64_portable.zip",
     "size": 41507213,

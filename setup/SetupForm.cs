@@ -30,7 +30,7 @@ namespace VeyloSetup
         private readonly ProgressBar progress;
         private readonly Button primary, secondary;
         private readonly ComboBox browsers;
-        private readonly LinkLabel accounts;
+        private readonly LinkLabel accounts, updates;
         private CancellationTokenSource install;
 
         private sealed class Browser
@@ -60,7 +60,7 @@ namespace VeyloSetup
             title.Font = new Font(Font.FontFamily, 17F, FontStyle.Bold);
             description = AddLabel("首次安装会联网准备三个平台的下载组件，约下载 246 MiB。", 28, 146, 530, 52);
             description.ForeColor = Muted;
-            status = AddLabel("正在检查安装环境…", 28, 216, 530, 51);
+            status = AddLabel("正在检查安装环境…", 28, 212, 530, 61);
             progress = new ProgressBar { Bounds = new Rectangle(28, 277, 530, 12), Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 25 };
             Controls.Add(progress);
             browsers = new ComboBox { Bounds = new Rectangle(28, 277, 154, 30), DropDownStyle = ComboBoxStyle.DropDownList, Visible = false };
@@ -69,6 +69,9 @@ namespace VeyloSetup
             accounts = new LinkLabel { Text = "打开下载器登录", LinkColor = Teal, Bounds = new Rectangle(205, 282, 150, 24), Visible = false };
             accounts.LinkClicked += (sender, e) => ShowAccounts();
             Controls.Add(accounts);
+            updates = new LinkLabel { Text = "组件更新", LinkColor = Teal, Bounds = new Rectangle(378, 282, 155, 24), Visible = false };
+            updates.LinkClicked += (sender, e) => ShowUpdateMenu();
+            Controls.Add(updates);
             secondary = AddButton("取消", 306, 316, 104);
             primary = AddButton("重试", 420, 316, 138);
             primary.BackColor = Teal;
@@ -134,6 +137,8 @@ namespace VeyloSetup
                 return;
             }
             ShowFinished();
+            try { if (installer.TrackUpdates) UpdateDownloads(); }
+            catch (Exception error) { status.Text = UserMessage(error); }
         }
 
         private void Retry(object sender, EventArgs e) { StartInstall(); }
@@ -163,6 +168,7 @@ namespace VeyloSetup
             browsers.Visible = browsers.Items.Count > 0;
             if (browsers.Visible) browsers.SelectedIndex = 0;
             accounts.Visible = true;
+            updates.Visible = true;
             primary.Text = browsers.Visible ? "打开扩展管理页" : "打开扩展文件夹";
             primary.Click -= Retry;
             primary.Click += OpenExtensions;
@@ -177,21 +183,76 @@ namespace VeyloSetup
         private void ShowAccounts()
         {
             var menu = new ContextMenuStrip();
-            menu.Items.Add("登录 YouTube / X", null, (sender, e) => OpenAccountApp("vendor/FluentYTDL-3.7.6/FluentYTDL.exe"));
-            menu.Items.Add("登录哔哩哔哩", null, (sender, e) => OpenAccountApp("vendor/Bili23-2.14.0/Bili23.exe"));
+            menu.Items.Add("登录 YouTube / X", null, (sender, e) => OpenAccountApp(false));
+            menu.Items.Add("登录哔哩哔哩", null, (sender, e) => OpenAccountApp(true));
             menu.Closed += (sender, e) => menu.Dispose();
             menu.Show(accounts, new Point(0, accounts.Height));
         }
 
-        private void OpenAccountApp(string relative)
+        private void OpenAccountApp(bool bili)
         {
-            try
-            {
-                string application = Files.Inside(installer.Root, relative);
-                Files.PlainPath(application);
-                Process.Start(new ProcessStartInfo(application) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(application) });
-            }
+            try { installer.OpenVendor(bili); }
             catch (Exception error) { status.Text = UserMessage(error); }
+        }
+
+        private void ShowUpdateMenu()
+        {
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("检查并更新兼容组件", null, (sender, e) => UpdateDownloads());
+            var track = new ToolStripMenuItem("打开管理器时自动更新") { CheckOnClick = true };
+            try { track.Checked = installer.TrackUpdates; }
+            catch (Exception error) { status.Text = UserMessage(error); }
+            track.CheckedChanged += (sender, e) =>
+            {
+                try
+                {
+                    installer.TrackUpdates = track.Checked;
+                    status.Text = track.Checked ? "每次打开管理器会自动检查并安装兼容的组件更新。" : "可随时从「组件更新」检查新版。";
+                    if (track.Checked) UpdateDownloads();
+                }
+                catch (Exception error) { status.Text = UserMessage(error); }
+            };
+            menu.Items.Add(track);
+            menu.Items.Add("恢复随包 yt-dlp", null, (sender, e) =>
+            {
+                try { installer.RestoreBundledEngine(); status.Text = "已恢复随包 yt-dlp，并关闭管理器自动更新。"; }
+                catch (Exception error) { status.Text = UserMessage(error); }
+            });
+            menu.Closed += (sender, e) => menu.Dispose();
+            menu.Show(updates, new Point(0, updates.Height));
+        }
+
+        private async void UpdateDownloads()
+        {
+            if (install != null) return;
+            title.Text = "下载组件更新";
+            description.Text = "官方新版本通过兼容检查后会用于新任务。";
+            status.ForeColor = Ink;
+            status.Text = "正在查询版本…";
+            primary.Enabled = false;
+            bool hasBrowser = browsers.Visible;
+            browsers.Visible = accounts.Visible = updates.Visible = false;
+            progress.Visible = true;
+            progress.Value = 0;
+            secondary.Text = "取消";
+            using (install = new CancellationTokenSource())
+            {
+                var update = (IProgress<Tuple<string, int>>)new Progress<Tuple<string, int>>(value => UpdateProgress(value.Item1, value.Item2));
+                try
+                {
+                    var result = await Task.Run(() => installer.UpdateComponents((message, percent) =>
+                        update.Report(Tuple.Create(message, percent)), install.Token));
+                    status.Text = string.Join(Environment.NewLine, result);
+                }
+                catch (OperationCanceledException) { status.Text = "已停止检查更新。"; }
+                catch (Exception error) { status.Text = UserMessage(error); status.ForeColor = Error; }
+            }
+            install = null;
+            progress.Visible = false;
+            accounts.Visible = updates.Visible = true;
+            browsers.Visible = hasBrowser;
+            primary.Enabled = secondary.Enabled = true;
+            secondary.Text = "复制路径";
         }
 
         private void CopyFolder()
@@ -244,7 +305,7 @@ namespace VeyloSetup
         [STAThread]
         public static int Main(string[] args)
         {
-            if (args.Length == 1 && (args[0] == "--quiet" || args[0] == "--version"))
+            if (args.Length == 1 && new[] { "--quiet", "--version", "--update-components", "--restore-engine" }.Contains(args[0]))
             {
                 // A GUI executable may have redirected standard streams but no console window.
                 // Encode the streams directly instead of changing a nonexistent console's code page.
@@ -252,7 +313,18 @@ namespace VeyloSetup
                 using (var errors = new StreamWriter(Console.OpenStandardError(), new UTF8Encoding(false)) { AutoFlush = true })
                 {
                     if (args[0] == "--version") { output.WriteLine(Installer.Version); return 0; }
-                    try { new Installer().Install((message, percent) => output.WriteLine(message), CancellationToken.None); return 0; }
+                    try
+                    {
+                        var setup = new Installer();
+                        if (args[0] == "--restore-engine") setup.RestoreBundledEngine();
+                        else if (args[0] == "--update-components")
+                        {
+                            foreach (string message in setup.UpdateComponents((name, percent) => output.WriteLine(name), CancellationToken.None))
+                                output.WriteLine(message);
+                        }
+                        else setup.Install((message, percent) => output.WriteLine(message), CancellationToken.None);
+                        return 0;
+                    }
                     catch (Exception error) { errors.WriteLine(UserMessage(error)); return 1; }
                 }
             }

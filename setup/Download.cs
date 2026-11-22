@@ -13,6 +13,7 @@ namespace VeyloSetup
     internal sealed class Dependency
     {
         public string Name { get; set; }
+        public string Version { get; set; }
         public string Filename { get; set; }
         public string Url { get; set; }
         public long Size { get; set; }
@@ -36,6 +37,36 @@ namespace VeyloSetup
         internal static string Hash(Stream input)
         {
             using (var sha = SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant();
+        }
+
+        public string ReadRelease(string repository, CancellationToken cancel)
+        {
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel))
+            {
+                deadline.CancelAfter(TimeSpan.FromSeconds(12));
+                using (var request = new HttpRequestMessage(HttpMethod.Get,
+                    "https://api.github.com/repos/" + repository + "/releases/latest"))
+                {
+                    request.Headers.Accept.ParseAdd("application/vnd.github+json");
+                    using (var response = http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).GetAwaiter().GetResult())
+                    {
+                        response.EnsureSuccessStatusCode();
+                        using (var input = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
+                        using (var output = new MemoryStream())
+                        using (deadline.Token.Register(input.Dispose))
+                        {
+                            var bytes = new byte[8192];
+                            int count;
+                            while ((count = input.ReadAsync(bytes, 0, bytes.Length, deadline.Token).GetAwaiter().GetResult()) > 0)
+                            {
+                                if (output.Length + count > 1024 * 1024) throw new IOException("GitHub 版本清单过大。");
+                                output.Write(bytes, 0, count);
+                            }
+                            return System.Text.Encoding.UTF8.GetString(output.ToArray());
+                        }
+                    }
+                }
+            }
         }
 
         private static bool Matches(string path, Dependency dependency)

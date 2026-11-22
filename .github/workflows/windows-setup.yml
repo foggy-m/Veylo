@@ -33,6 +33,8 @@ jobs:
           node (Join-Path $env:VEYLO_PLAYWRIGHT 'cli.js') install chromium --no-shell
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/setup_browser_test.cjs
+      - name: Verify compatible component updates and rollback
+        run: python -B tests/setup_component_update_test.py
       - name: Verify cold start regression and existing extension behavior
         shell: pwsh
         run: |
@@ -61,3 +63,4 @@ jobs:
             dist/SHA256SUMS.txt
             dist/clean-install-report.json
             dist/clean-browser-popup.png
+            dist/Veylo-verified-components.json

@@ -13,7 +13,7 @@ using Microsoft.Win32;
 
 namespace VeyloSetup
 {
-    internal sealed class Installer
+    internal sealed partial class Installer
     {
         public const string Version = "2.4.5";
         public const string FluentHost = "com.veylo.youtube_x";
@@ -40,15 +40,7 @@ namespace VeyloSetup
 
         public void Install(Action<string, int> progress, CancellationToken cancel)
         {
-            if (!Environment.Is64BitOperatingSystem || Environment.OSVersion.Version.Major < 10)
-                throw new InvalidOperationException("需要 Windows 10 或 11 的 64 位版本。");
-            Files.MakeDirectory(Root);
-            string lockFile = Path.Combine(Root, ".install.lock");
-            Files.PlainPath(lockFile);
-            FileStream locked;
-            try { locked = new FileStream(lockFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None); }
-            catch (IOException error) { throw new InvalidOperationException("另一个 Veylo 安装程序正在运行。请关闭后重试。", error); }
-            using (locked)
+            using (LockInstall())
             {
                 progress("正在安装 Veylo 扩展和本机桥接…", -1);
                 Files.MakeDirectory(App);
@@ -58,38 +50,25 @@ namespace VeyloSetup
                 var bili = PrepareHost(BiliHost, "bilibili/native", "BiliBridge.exe", "1.5.3");
                 var registrations = CheckRegistrations(new[] { youtube, bili });
 
-                string vendor = Files.MakeDirectory(Path.Combine(Root, "vendor"));
-                string fluent = Files.Inside(vendor, "FluentYTDL-3.7.6");
-                string bili23 = Files.Inside(vendor, "Bili23-2.14.0");
-                bool needFluent = !HasVendor(fluent, dependencies["fluent"], FluentFiles);
-                bool needBili = !HasVendor(bili23, dependencies["bili"], BiliFiles);
+                var fluent = InstalledVendor(false, dependencies["fluent"]);
+                var bili23 = InstalledVendor(true, dependencies["bili"]);
                 string cache = Files.MakeDirectory(Path.Combine(Root, "download-cache"));
                 ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                 using (var download = new Download(progress))
                 {
-                    if (needFluent)
-                    {
-                        string extractor = download.Fetch(dependencies["extractor"], cache, cancel);
-                        string archive = download.Fetch(dependencies["fluent"], cache, cancel);
-                        progress("正在解压 YouTube / X 下载组件…", -1);
-                        UnpackVendor(fluent, dependencies["fluent"], FluentFiles, archive, extractor, cancel);
-                    }
-                    if (needBili)
-                    {
-                        string archive = download.Fetch(dependencies["bili"], cache, cancel);
-                        progress("正在解压哔哩哔哩下载组件…", -1);
-                        UnpackVendor(bili23, dependencies["bili"], BiliFiles, archive, null, cancel);
-                    }
+                    EnsureVendor(fluent, false, dependencies["extractor"], download, progress, cancel);
+                    EnsureVendor(bili23, true, dependencies["extractor"], download, progress, cancel);
                 }
 
                 progress("正在连接浏览器与下载组件…", -1);
                 string output = Files.MakeDirectory(Path.Combine(Root, "Downloads"));
-                Files.WriteAtomic(Path.Combine(youtube.Directory, "fluent_paths.json"), json.Serialize(new { fluent_root = fluent, download_dir = output }));
-                Files.WriteAtomic(Path.Combine(bili.Directory, "bili_paths.json"), json.Serialize(new { bili_root = bili23, download_dir = output }));
+                WriteVendorPaths(fluent, false, output);
+                WriteVendorPaths(bili23, true, output);
                 CheckBridge(youtube, cancel);
                 CheckBridge(bili, cancel);
                 cancel.ThrowIfCancellationRequested();
                 Register(registrations);
+                SaveManager();
                 foreach (Dependency dependency in dependencies.Values)
                 {
                     string downloaded = Files.Inside(cache, dependency.Filename);
@@ -100,6 +79,17 @@ namespace VeyloSetup
                 }
                 progress("安装完成", 100);
             }
+        }
+
+        private FileStream LockInstall()
+        {
+            if (!Environment.Is64BitOperatingSystem || Environment.OSVersion.Version.Major < 10)
+                throw new InvalidOperationException("需要 Windows 10 或 11 的 64 位版本。");
+            Files.MakeDirectory(Root);
+            string path = Path.Combine(Root, ".install.lock");
+            Files.PlainPath(path);
+            try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None); }
+            catch (IOException error) { throw new InvalidOperationException("另一个 Veylo 安装程序正在运行。请关闭后重试。", error); }
         }
 
         internal static Stream Resource(string name)
