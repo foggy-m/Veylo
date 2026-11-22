@@ -31,7 +31,7 @@ namespace VeyloSetup
         public Download(Action<string, int> progress)
         {
             this.progress = progress;
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("Veylo-Setup/2.4.5");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Veylo-Setup/" + Installer.Version);
         }
 
         internal static string Hash(Stream input)

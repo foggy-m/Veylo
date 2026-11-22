@@ -13,7 +13,8 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'setup'
 DIST = ROOT / 'dist'
-VERSION = '2.4.5'
+VERSION = '2.4.6'
+APP_VERSION = '2.4.5'
 OUTPUT = DIST / f'Veylo-{VERSION}-Setup-x64.exe'
 COMPILER = Path(os.environ['WINDIR']) / 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 RUNTIME = {
@@ -77,7 +78,7 @@ def inspect_payload(payload):
             if any(re.search(pattern, view) is not None for view in views):
                 raise ValueError(f'Unexpected {category} in {path}')
     manifest = json.loads(payload['extension/manifest.json'])
-    if manifest['version'] != VERSION or any(manifest.get(key) for key in (
+    if manifest['version'] != APP_VERSION or any(manifest.get(key) for key in (
             'content_scripts', 'host_permissions', 'web_accessible_resources', 'externally_connectable')):
         raise ValueError('Unexpected manifest privileges or version')
 

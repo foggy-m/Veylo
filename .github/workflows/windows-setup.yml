@@ -2,7 +2,7 @@ name: Clean Windows setup
 on:
   workflow_dispatch:
   push:
-    branches: [verify/setup-2.4.5]
+    branches: [verify/setup-2.4.6]
 permissions:
   contents: read
 jobs:
@@ -21,6 +21,16 @@ jobs:
           python -B tools/check_publication.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -B setup/build.py
+      - name: Verify download progress and installer layout
+        shell: pwsh
+        run: |
+          $Compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          $LayoutCheck = Join-Path $env:RUNNER_TEMP 'veylo-setup-layout.exe'
+          $Manifest = (Resolve-Path -LiteralPath 'setup/Setup.manifest').Path
+          $Source = (Resolve-Path -LiteralPath 'tests/setup_layout_test.cs').Path
+          & $Compiler /nologo /target:exe /platform:x64 /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll "/win32manifest:$Manifest" "/out:$LayoutCheck" $Source
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $LayoutCheck dist/Veylo-2.4.6-Setup-x64.exe
       - name: Run the Setup release executable on this fresh VM
         run: python -B tests/setup_clean_install_test.py
       - name: Test Chrome extension and guest download requests
@@ -59,7 +69,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: |
-            dist/Veylo-2.4.5-Setup-x64.exe
+            dist/Veylo-2.4.6-Setup-x64.exe
             dist/SHA256SUMS.txt
             dist/clean-install-report.json
             dist/clean-browser-popup.png

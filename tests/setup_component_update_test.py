@@ -45,7 +45,7 @@ def main():
     assert os.environ.get("GITHUB_ACTIONS") == "true", "Use a clean Actions Windows profile"
     root = Path(os.environ["LOCALAPPDATA"]) / "Veylo"
     app = root / "app-2.4.5"
-    setup = ROOT / "dist/Veylo-2.4.5-Setup-x64.exe"
+    setup = ROOT / "dist/Veylo-2.4.6-Setup-x64.exe"
     manager = app / "Veylo-Setup.exe"
     assert manager.read_bytes() == setup.read_bytes(), "Start-menu manager uses the verified installer"
     programs = Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs"

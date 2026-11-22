@@ -13,8 +13,8 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Veylo 安装程序")]
 [assembly: AssemblyProduct("Veylo")]
-[assembly: AssemblyVersion("2.4.5.0")]
-[assembly: AssemblyFileVersion("2.4.5.0")]
+[assembly: AssemblyVersion(VeyloSetup.Installer.Version + ".0")]
+[assembly: AssemblyFileVersion(VeyloSetup.Installer.Version + ".0")]
 
 namespace VeyloSetup
 {
@@ -41,60 +41,130 @@ namespace VeyloSetup
 
         public SetupForm()
         {
+            SuspendLayout();
             Text = "Veylo 安装程序";
             Icon = Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
+            // All layout sizes are expressed at 96 DPI, even when Setup launches on a scaled display.
+            AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(586, 366);
+            ClientSize = new Size(586, 330);
             BackColor = Paper;
             Font = new Font("Microsoft YaHei UI", 10F);
 
-            var brand = new Panel { Dock = DockStyle.Top, Height = 80, BackColor = Ink };
-            var name = new Label { Text = "Veylo", ForeColor = Color.White, AutoSize = true,
-                                   Location = new Point(28, 20), Font = new Font("Segoe UI", 22F, FontStyle.Bold) };
-            brand.Controls.Add(name);
-            Controls.Add(brand);
-            title = AddLabel("正在安装 Veylo", 28, 101, 530, 37);
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            Controls.Add(layout);
+
+            var brand = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = Padding.Empty, Padding = new Padding(28, 17, 28, 17), BackColor = Ink
+            };
+            brand.Controls.Add(new Label
+            {
+                Text = "Veylo", ForeColor = Color.White, AutoSize = true,
+                Margin = Padding.Empty, Font = new Font("Segoe UI", 22F, FontStyle.Bold)
+            });
+            layout.Controls.Add(brand, 0, 0);
+
+            var body = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Margin = Padding.Empty };
+            layout.Controls.Add(body, 0, 1);
+            var content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1, Padding = new Padding(28, 22, 28, 10)
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            body.Controls.Add(content);
+
+            title = CreateLabel("正在安装 Veylo", 9);
             title.Font = new Font(Font.FontFamily, 17F, FontStyle.Bold);
-            description = AddLabel("首次安装会联网准备三个平台的下载组件，约下载 246 MiB。", 28, 146, 530, 52);
+            content.Controls.Add(title);
+            description = CreateLabel("首次安装会联网准备三个平台的下载组件，约下载 246 MiB。", 21);
             description.ForeColor = Muted;
-            status = AddLabel("正在检查安装环境…", 28, 212, 530, 61);
-            progress = new ProgressBar { Bounds = new Rectangle(28, 277, 530, 12), Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 25 };
-            Controls.Add(progress);
-            browsers = new ComboBox { Bounds = new Rectangle(28, 277, 154, 30), DropDownStyle = ComboBoxStyle.DropDownList, Visible = false };
-            browsers.AccessibleName = "选择浏览器";
-            Controls.Add(browsers);
-            accounts = new LinkLabel { Text = "打开下载器登录", LinkColor = Teal, Bounds = new Rectangle(205, 282, 150, 24), Visible = false };
+            content.Controls.Add(description);
+            status = CreateLabel("正在检查安装环境…", 13);
+            content.Controls.Add(status);
+            progress = new ProgressBar
+            {
+                Dock = DockStyle.Top, Height = 12, Margin = new Padding(28, 7, 28, 8),
+                Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 25
+            };
+            layout.Controls.Add(progress, 0, 2);
+
+            var tools = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty
+            };
+            browsers = new ComboBox
+            {
+                Width = 154, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 0, 22, 6),
+                AccessibleName = "选择浏览器", Visible = false
+            };
+            tools.Controls.Add(browsers);
+            accounts = new LinkLabel
+            {
+                Text = "打开下载器登录", LinkColor = Teal, AutoSize = true, Margin = new Padding(0, 4, 22, 6), Visible = false
+            };
             accounts.LinkClicked += (sender, e) => ShowAccounts();
-            Controls.Add(accounts);
-            updates = new LinkLabel { Text = "组件更新", LinkColor = Teal, Bounds = new Rectangle(378, 282, 155, 24), Visible = false };
+            tools.Controls.Add(accounts);
+            updates = new LinkLabel
+            {
+                Text = "组件更新", LinkColor = Teal, AutoSize = true, Margin = new Padding(0, 4, 0, 6), Visible = false
+            };
             updates.LinkClicked += (sender, e) => ShowUpdateMenu();
-            Controls.Add(updates);
-            secondary = AddButton("取消", 306, 316, 104);
-            primary = AddButton("重试", 420, 316, 138);
+            tools.Controls.Add(updates);
+            content.Controls.Add(tools);
+
+            var actions = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.RightToLeft, Margin = Padding.Empty, Padding = new Padding(28, 7, 28, 18)
+            };
+            layout.Controls.Add(actions, 0, 3);
+            primary = CreateButton("重试", 138);
             primary.BackColor = Teal;
             primary.ForeColor = Color.White;
             primary.FlatStyle = FlatStyle.Flat;
             primary.Visible = false;
+            actions.Controls.Add(primary);
+            secondary = CreateButton("取消", 104);
+            actions.Controls.Add(secondary);
             secondary.Click += (sender, e) => { if (install != null) CancelInstall(); else CopyFolder(); };
             FormClosing += (sender, e) => { if (install != null) { e.Cancel = true; CancelInstall(); } };
-            Shown += (sender, e) => StartInstall();
+            ResumeLayout(true);
         }
 
-        private Label AddLabel(string text, int x, int y, int width, int height)
+        protected override void OnLoad(EventArgs e)
         {
-            var label = new Label { Text = text, ForeColor = Ink, Bounds = new Rectangle(x, y, width, height) };
-            Controls.Add(label);
-            return label;
+            base.OnLoad(e);
+            Rectangle workArea = Screen.FromControl(this).WorkingArea;
+            Size = new Size(Math.Min(Width, workArea.Width), Math.Min(Height, workArea.Height));
         }
 
-        private Button AddButton(string text, int x, int y, int width)
+        private static Label CreateLabel(string text, int bottomMargin)
         {
-            var button = new Button { Text = text, Bounds = new Rectangle(x, y, width, 32), ForeColor = Ink };
-            Controls.Add(button);
-            return button;
+            return new Label
+            {
+                Text = text, ForeColor = Ink, AutoSize = true, Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, 0, bottomMargin)
+            };
+        }
+
+        private static Button CreateButton(string text, int width)
+        {
+            return new Button
+            {
+                Text = text, ForeColor = Ink, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new Size(width, 32), Margin = new Padding(8, 0, 0, 0)
+            };
         }
 
         private async void StartInstall()
@@ -330,7 +400,11 @@ namespace VeyloSetup
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            using (var window = new SetupForm()) Application.Run(window);
+            using (var window = new SetupForm())
+            {
+                window.Shown += (sender, e) => window.StartInstall();
+                Application.Run(window);
+            }
             return 0;
         }
     }

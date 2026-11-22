@@ -15,7 +15,9 @@ namespace VeyloSetup
 {
     internal sealed partial class Installer
     {
-        public const string Version = "2.4.5";
+        public const string Version = "2.4.6";
+        // Setup-only updates reuse the directory already loaded by the browser.
+        private const string AppVersion = "2.4.5";
         public const string FluentHost = "com.veylo.youtube_x";
         public const string BiliHost = "com.veylo.bilibili";
         private const string Origin = "chrome-extension://ikaahmfclfkamdgikchmjnoalpklkddk/";
@@ -33,7 +35,7 @@ namespace VeyloSetup
         };
 
         public readonly string Root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Veylo");
-        public string App { get { return Path.Combine(Root, "app-" + Version); } }
+        public string App { get { return Path.Combine(Root, "app-" + AppVersion); } }
         public string Extension { get { return Path.Combine(App, "extension"); } }
 
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
