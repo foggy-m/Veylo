@@ -15,9 +15,10 @@ namespace VeyloSetup
 {
     internal sealed partial class Installer
     {
-        public const string Version = "2.4.6";
+        public const string Version = "2.4.7";
         // Setup-only updates reuse the directory already loaded by the browser.
         private const string AppVersion = "2.4.5";
+        internal const string AppDirectory = "app-" + AppVersion;
         public const string FluentHost = "com.veylo.youtube_x";
         public const string BiliHost = "com.veylo.bilibili";
         private const string Origin = "chrome-extension://ikaahmfclfkamdgikchmjnoalpklkddk/";
@@ -34,8 +35,8 @@ namespace VeyloSetup
             "Bili23.exe", "runtime/python.exe", "bundle/ffmpeg.exe", "script/util/common/config.py"
         };
 
-        public readonly string Root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Veylo");
-        public string App { get { return Path.Combine(Root, "app-" + AppVersion); } }
+        public readonly string Root;
+        public string App { get { return Path.Combine(Root, AppDirectory); } }
         public string Extension { get { return Path.Combine(App, "extension"); } }
 
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
@@ -44,13 +45,14 @@ namespace VeyloSetup
         {
             using (LockInstall())
             {
+                var youtube = PrepareHost(FluentHost, "native", "ShiguangBridge.exe", "1.7.3");
+                var bili = PrepareHost(BiliHost, "bilibili/native", "BiliBridge.exe", "1.5.3");
+                var registrations = CheckRegistrations(new[] { youtube, bili });
+                PrepareInstallRoot();
                 progress("正在安装 Veylo 扩展和本机桥接…", -1);
                 Files.MakeDirectory(App);
                 using (var payload = Resource("veylo.payload.zip")) Files.ExpandZip(payload, App, true, cancel);
                 var dependencies = ReadDependencies();
-                var youtube = PrepareHost(FluentHost, "native", "ShiguangBridge.exe", "1.7.3");
-                var bili = PrepareHost(BiliHost, "bilibili/native", "BiliBridge.exe", "1.5.3");
-                var registrations = CheckRegistrations(new[] { youtube, bili });
 
                 var fluent = InstalledVendor(false, dependencies["fluent"]);
                 var bili23 = InstalledVendor(true, dependencies["bili"]);
@@ -69,8 +71,9 @@ namespace VeyloSetup
                 CheckBridge(youtube, cancel);
                 CheckBridge(bili, cancel);
                 cancel.ThrowIfCancellationRequested();
+                string manager = InstallManager();
                 Register(registrations);
-                SaveManager();
+                SaveManagerShortcut(manager);
                 foreach (Dependency dependency in dependencies.Values)
                 {
                     string downloaded = Files.Inside(cache, dependency.Filename);
@@ -87,8 +90,8 @@ namespace VeyloSetup
         {
             if (!Environment.Is64BitOperatingSystem || Environment.OSVersion.Version.Major < 10)
                 throw new InvalidOperationException("需要 Windows 10 或 11 的 64 位版本。");
-            Files.MakeDirectory(Root);
-            string path = Path.Combine(Root, ".install.lock");
+            // All destinations share the current user's browser registrations.
+            string path = Path.Combine(Files.MakeDirectory(DefaultRoot), ".install.lock");
             Files.PlainPath(path);
             try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None); }
             catch (IOException error) { throw new InvalidOperationException("另一个 Veylo 安装程序正在运行。请关闭后重试。", error); }
@@ -186,6 +189,7 @@ namespace VeyloSetup
         private List<Registration> CheckRegistrations(IEnumerable<Host> hosts)
         {
             var values = new List<Registration>();
+            string activeRoot = PreferredRoot();
             foreach (Host host in hosts)
             {
                 foreach (string browser in BrowserKeys)
@@ -198,7 +202,8 @@ namespace VeyloSetup
                         {
                             object value = existing.GetValue("", null, RegistryValueOptions.DoNotExpandEnvironmentNames);
                             previous = value as string;
-                            if (value != null && (string.IsNullOrEmpty(previous) || existing.GetValueKind("") != RegistryValueKind.String || !OwnedRegistration(host, previous)))
+                            if (value != null && (string.IsNullOrEmpty(previous) || existing.GetValueKind("") != RegistryValueKind.String ||
+                                                  !OwnedRegistration(host, previous, activeRoot)))
                                 throw new InvalidOperationException("已有指向其他应用的浏览器桥接注册。请保留原注册并检查 Veylo 安装位置。");
                         }
                         values.Add(new Registration { Host = host, Key = key, Previous = previous });
@@ -208,20 +213,20 @@ namespace VeyloSetup
             return values;
         }
 
-        private bool OwnedRegistration(Host host, string previous)
+        private bool OwnedRegistration(Host host, string previous, string activeRoot)
         {
             if (!Path.IsPathRooted(previous)) return false;
             string full = Path.GetFullPath(previous);
             if (string.Equals(full, host.Manifest, StringComparison.OrdinalIgnoreCase)) return true;
-            string relative = host.Manifest.Substring(App.Length + 1);
-            string prefix = Root.TrimEnd('\\') + "\\";
-            if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
-            string remainder = full.Substring(prefix.Length);
-            int separator = remainder.IndexOf('\\');
-            if (separator <= 0 || !Regex.IsMatch(remainder.Substring(0, separator), @"^app-\d+\.\d+\.\d+$") ||
-                !string.Equals(remainder.Substring(separator + 1), relative, StringComparison.OrdinalIgnoreCase)) return false;
+            string suffix = host.Manifest.Substring(App.Length);
+            if (!full.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return false;
+            string app = full.Substring(0, full.Length - suffix.Length);
+            string previousRoot = Path.GetDirectoryName(app);
+            if (previousRoot == null || !Regex.IsMatch(Path.GetFileName(app), @"\Aapp-\d+\.\d+\.\d+\z")) return false;
             Files.PlainPath(full);
-            return File.Exists(full);
+            return string.Equals(previousRoot, activeRoot, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(previousRoot, DefaultRoot, StringComparison.OrdinalIgnoreCase) ||
+                   (File.Exists(full) && HasInstallMarker(previousRoot));
         }
 
         private void CheckBridge(Host host, CancellationToken cancel)
@@ -273,6 +278,7 @@ namespace VeyloSetup
                         changed.Add(item);
                     }
                 }
+                SaveActiveRoot();
             }
             catch
             {

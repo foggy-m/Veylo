@@ -13,7 +13,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'setup'
 DIST = ROOT / 'dist'
-VERSION = '2.4.6'
+VERSION = '2.4.7'
 APP_VERSION = '2.4.5'
 OUTPUT = DIST / f'Veylo-{VERSION}-Setup-x64.exe'
 COMPILER = Path(os.environ['WINDIR']) / 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'

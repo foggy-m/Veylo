@@ -112,7 +112,7 @@ namespace VeyloSetup
             Process.Start(launch);
         }
 
-        private void SaveManager()
+        private string InstallManager()
         {
             string running = Assembly.GetExecutingAssembly().Location;
             string installed = Path.Combine(App, "Veylo-Setup.exe");
@@ -128,7 +128,11 @@ namespace VeyloSetup
                 }
                 if (!matches) Files.CopyAtomic(running, installed);
             }
+            return installed;
+        }
 
+        private void SaveManagerShortcut(string installed)
+        {
             try
             {
                 string programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs, Environment.SpecialFolderOption.Create);

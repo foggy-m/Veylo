@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -34,6 +35,24 @@ internal static class SetupLayoutTest
             var status = Field<Label>(form, "status");
             var progress = Field<ProgressBar>(form, "progress");
             var cancel = Field<Button>(form, "secondary");
+            var primary = Field<Button>(form, "primary");
+            var destination = Field<TextBox>(form, "destination");
+            var location = Field<TableLayoutPanel>(form, "location");
+            CheckText(title);
+            CheckText(description);
+            CheckInClient(form, destination);
+            CheckTextIn(form, location.Controls.OfType<Button>().Single());
+            CheckTextIn(form, primary);
+            Require(Path.IsPathRooted(destination.Text) && !progress.Visible, "Setup must offer a path before installing");
+
+            string originalLocation = destination.Text;
+            destination.Text = "D:relative-install-location";
+            primary.PerformClick();
+            Require(destination.Visible && !progress.Visible && status.Visible && primary.Text == "重试",
+                    "An invalid destination must leave the chooser available");
+            destination.Text = originalLocation;
+            setup.GetMethod("ShowInstalling", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(form, null);
+            Require(!destination.Visible && progress.Visible, "Install progress must replace the chooser");
             status.Text = "下载 FluentYTDL 3.7.6 full (Windows x64)  132/182 MB";
             CheckText(title);
             CheckText(description);
@@ -68,7 +87,7 @@ internal static class SetupLayoutTest
             Require(!accounts.Bounds.IntersectsWith(updates.Bounds), "Setup links must fit beside or below each other");
             CheckTextIn(form, Field<Button>(form, "primary"));
             CheckTextIn(form, cancel);
-            Console.WriteLine("PASS Setup download, compact window and multiline update results at {0} DPI",
+            Console.WriteLine("PASS Setup location, retry, progress and update layout at {0} DPI",
                               form.CurrentAutoScaleDimensions.Width);
         }
     }

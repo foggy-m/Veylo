@@ -8,8 +8,11 @@ import sys
 import winreg
 
 ROOT = Path(__file__).resolve().parents[1]
+SETUP = ROOT / 'dist/Veylo-2.4.7-Setup-x64.exe'
+APP_DIR = 'app-2.4.5'
 ORIGIN = 'chrome-extension://ikaahmfclfkamdgikchmjnoalpklkddk/'
 HOSTS = {'com.veylo.youtube_x': 'native/ShiguangBridge.exe', 'com.veylo.bilibili': 'bilibili/native/BiliBridge.exe'}
+BROWSERS = (r'Google\Chrome', r'Microsoft\Edge', 'Chromium', r'Tabbit Browser\Tabbit Browser', 'Tabbit')
 
 
 def command(exe, *args, timeout=25):
@@ -20,25 +23,34 @@ def command(exe, *args, timeout=25):
     return result.stdout.decode('utf-8', 'replace')
 
 
+def assert_registrations(install):
+    app = install / APP_DIR
+    for browser in BROWSERS:
+        for name, relative in HOSTS.items():
+            key = fr'Software\{browser}\NativeMessagingHosts\{name}'
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as handle:
+                manifest, kind = winreg.QueryValueEx(handle, '')
+            assert Path(manifest) == (app / relative).with_name(name + '.json')
+            data = json.loads(Path(manifest).read_text(encoding='utf-8'))
+            assert kind == winreg.REG_SZ and data['name'] == name
+            assert Path(data['path']) == app / relative and data['allowed_origins'] == [ORIGIN]
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Veylo\Setup') as handle:
+        saved, kind = winreg.QueryValueEx(handle, 'InstallDirectory')
+    assert kind == winreg.REG_SZ and Path(saved) == install
+
+
 def main():
     install = Path(os.environ['LOCALAPPDATA']) / 'Veylo'
     bili_profile = Path(os.environ['APPDATA']) / 'Bili23 Downloader' / 'config.json'
     assert not install.exists() and not bili_profile.exists(), 'Use an unused Windows profile'
     print('PASS clean Windows user has neither an installation nor a Bili23 profile', flush=True)
-    exe = ROOT / 'dist/Veylo-2.4.6-Setup-x64.exe'
-    assert command(exe, '--version').strip() == '2.4.6', 'GUI executable must support redirected output without a console'
+    exe = SETUP
+    assert command(exe, '--version').strip() == '2.4.7', 'GUI executable must support redirected output without a console'
     print(command(exe, '--quiet', timeout=1000), flush=True)
-    app = install / 'app-2.4.5'
+    app = install / APP_DIR
     fluent, bili = install / 'vendor/FluentYTDL-3.7.6', install / 'vendor/Bili23-2.14.0'
     assert json.loads((app / 'extension/manifest.json').read_text(encoding='utf-8'))['version'] == '2.4.5'
-    for browser in ('Google/Chrome', 'Microsoft/Edge', 'Chromium'):
-        for name, relative in HOSTS.items():
-            key = fr'Software\{browser.replace("/", chr(92))}\NativeMessagingHosts\{name}'
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as handle:
-                manifest, kind = winreg.QueryValueEx(handle, '')
-            data = json.loads(Path(manifest).read_text(encoding='utf-8'))
-            assert kind == winreg.REG_SZ and data['name'] == name
-            assert Path(data['path']) == app / relative and data['allowed_origins'] == [ORIGIN]
+    assert_registrations(install)
     assert not bili_profile.exists() and not (fluent / 'config.json').exists(), 'Install must not require either vendor GUI'
     assert command(fluent / 'bin/yt-dlp/yt-dlp.exe', '--version').strip()
     deno = next(path for path in [fluent / 'bin/js/deno.exe', fluent / 'bin/deno/deno.exe'] if path.is_file())

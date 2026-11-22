@@ -5,7 +5,8 @@ const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { chromium } = require(process.env.VEYLO_PLAYWRIGHT);
 
-const app = path.join(process.env.LOCALAPPDATA, 'Veylo', 'app-2.4.5');
+const install = process.env.VEYLO_TEST_INSTALL_DIR || path.join(process.env.LOCALAPPDATA, 'Veylo');
+const app = path.join(install, 'app-2.4.5');
 const extension = path.join(app, 'extension');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'veylo-clean-chromium-'));
 const extensionId = 'ikaahmfclfkamdgikchmjnoalpklkddk';
@@ -26,7 +27,7 @@ async function smokeDownload(page, test) {
   const task = await send(page, { type: 'sg-deliver', mode: 'direct', url, quality });
   assert(task?.ok === true, `${platform} could not start from a clean install: ${task?.error}`);
   assert.match(task.jobId, /^[a-f0-9]{32}$/);
-  assert.equal(path.resolve(task.downloadDir), path.resolve(process.env.LOCALAPPDATA, 'Veylo', 'Downloads'));
+  assert.equal(path.resolve(task.downloadDir), path.join(install, 'Downloads'));
   if (platform === 'bili') assert.equal(task.login, false);
   const deadline = Date.now() + 90000;
   try {
@@ -35,7 +36,9 @@ async function smokeDownload(page, test) {
       assert(status?.ok === true, `${platform} cannot read the accepted task: ${status?.error}`);
       const job = status.job;
       if (job.state === 'completed') {
-        assert(job.files.length > 0 && job.files.every(file => fs.statSync(file).size > 0), 'No valid media was saved');
+        assert(job.files.length > 0 && job.files.every(file =>
+          path.dirname(file) === path.join(install, 'Downloads') && fs.statSync(file).size > 0),
+        'No valid media was saved to the selected installation');
         return { platform, accepted: true, liveDownload: 'completed', files: job.files.length };
       }
       if (job.state === 'failed') return { platform, accepted: true, liveDownload: 'failed', message: job.error };
@@ -67,7 +70,7 @@ async function serviceAccess(test) {
 }
 
 function diagnoseYouTube(url) {
-  const bin = path.join(process.env.LOCALAPPDATA, 'Veylo', 'vendor', 'FluentYTDL-3.7.6', 'bin');
+  const bin = path.join(install, 'vendor', 'FluentYTDL-3.7.6', 'bin');
   const deno = [path.join(bin, 'js', 'deno.exe'), path.join(bin, 'deno', 'deno.exe')].find(file => fs.existsSync(file));
   if (!deno) return Promise.resolve('runtime-missing');
   const engine = path.join(bin, 'yt-dlp', 'yt-dlp.exe');

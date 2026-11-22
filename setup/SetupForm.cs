@@ -25,13 +25,16 @@ namespace VeyloSetup
         private static readonly Color Teal = ColorTranslator.FromHtml("#17645B");
         private static readonly Color Muted = ColorTranslator.FromHtml("#455C5F");
         private static readonly Color Error = ColorTranslator.FromHtml("#913A2D");
-        private readonly Installer installer = new Installer();
+        private Installer installer;
         private readonly Label title, description, status;
+        private readonly TableLayoutPanel location;
+        private readonly TextBox destination;
         private readonly ProgressBar progress;
         private readonly Button primary, secondary;
         private readonly ComboBox browsers;
         private readonly LinkLabel accounts, updates;
         private CancellationTokenSource install;
+        private bool finished;
 
         private sealed class Browser
         {
@@ -84,18 +87,42 @@ namespace VeyloSetup
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             body.Controls.Add(content);
 
-            title = CreateLabel("正在安装 Veylo", 9);
+            title = CreateLabel("安装 Veylo", 9);
             title.Font = new Font(Font.FontFamily, 17F, FontStyle.Bold);
             content.Controls.Add(title);
-            description = CreateLabel("首次安装会联网准备三个平台的下载组件，约下载 246 MiB。", 21);
+            description = CreateLabel("安装器会自动准备下载组件并连接浏览器。", 18);
             description.ForeColor = Muted;
             content.Controls.Add(description);
-            status = CreateLabel("正在检查安装环境…", 13);
+
+            location = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2, RowCount = 2, Margin = new Padding(0, 0, 0, 12)
+            };
+            location.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            location.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            var locationLabel = CreateLabel("安装位置", 6);
+            location.Controls.Add(locationLabel, 0, 0);
+            location.SetColumnSpan(locationLabel, 2);
+            destination = new TextBox
+            {
+                Text = Installer.PreferredRoot(), AccessibleName = "安装位置",
+                Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 0, 8, 0)
+            };
+            location.Controls.Add(destination, 0, 1);
+            var browse = CreateButton("浏览…", 78);
+            browse.Margin = Padding.Empty;
+            browse.Click += (sender, e) => BrowseForLocation();
+            location.Controls.Add(browse, 1, 1);
+            content.Controls.Add(location);
+
+            status = CreateLabel("", 13);
+            status.Visible = false;
             content.Controls.Add(status);
             progress = new ProgressBar
             {
                 Dock = DockStyle.Top, Height = 12, Margin = new Padding(28, 7, 28, 8),
-                Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 25
+                Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 25, Visible = false
             };
             layout.Controls.Add(progress, 0, 2);
 
@@ -129,15 +156,21 @@ namespace VeyloSetup
                 FlowDirection = FlowDirection.RightToLeft, Margin = Padding.Empty, Padding = new Padding(28, 7, 28, 18)
             };
             layout.Controls.Add(actions, 0, 3);
-            primary = CreateButton("重试", 138);
+            primary = CreateButton("安装", 138);
             primary.BackColor = Teal;
             primary.ForeColor = Color.White;
             primary.FlatStyle = FlatStyle.Flat;
-            primary.Visible = false;
+            primary.Click += (sender, e) => { if (finished) OpenExtensions(); else StartInstall(); };
             actions.Controls.Add(primary);
             secondary = CreateButton("取消", 104);
             actions.Controls.Add(secondary);
-            secondary.Click += (sender, e) => { if (install != null) CancelInstall(); else CopyFolder(); };
+            secondary.Click += (sender, e) =>
+            {
+                if (install != null) CancelInstall();
+                else if (finished) CopyFolder();
+                else Close();
+            };
+            AcceptButton = primary;
             FormClosing += (sender, e) => { if (install != null) { e.Cancel = true; CancelInstall(); } };
             ResumeLayout(true);
         }
@@ -167,17 +200,38 @@ namespace VeyloSetup
             };
         }
 
-        private async void StartInstall()
+        private void BrowseForLocation()
         {
-            if (install != null) return;
+            using (var dialog = new FolderBrowserDialog { Description = "选择 Veylo 安装文件夹", ShowNewFolderButton = true })
+            {
+                if (Directory.Exists(destination.Text)) dialog.SelectedPath = destination.Text;
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                string selected = dialog.SelectedPath;
+                destination.Text = string.Equals(selected, Path.GetPathRoot(selected), StringComparison.OrdinalIgnoreCase)
+                    ? Path.Combine(selected, "Veylo") : selected;
+            }
+        }
+
+        private void ShowInstalling()
+        {
             title.Text = "正在安装 Veylo";
             description.Text = "首次安装会联网准备三个平台的下载组件，约下载 246 MiB。";
+            location.Visible = false;
+            status.Text = "正在检查安装环境…";
             status.ForeColor = Ink;
+            status.Visible = true;
             progress.Visible = true;
             secondary.Text = "取消";
             secondary.Enabled = true;
-            secondary.Visible = true;
             primary.Visible = false;
+        }
+
+        private async void StartInstall()
+        {
+            if (install != null) return;
+            try { installer = new Installer(destination.Text); }
+            catch (Exception error) { ShowInstallFailure(error); return; }
+            ShowInstalling();
             Exception failure = null;
             using (install = new CancellationTokenSource())
             {
@@ -192,18 +246,7 @@ namespace VeyloSetup
             if (failure != null)
             {
                 if (failure is OperationCanceledException) { Close(); return; }
-                title.Text = "安装未完成";
-                description.Text = "可以在此重试。已经校验通过的依赖会保留并继续使用。";
-                status.Text = UserMessage(failure);
-                status.ForeColor = Error;
-                progress.Visible = false;
-                secondary.Visible = false;
-                primary.Text = "重试";
-                primary.Visible = true;
-                primary.Click -= Retry;
-                primary.Click += Retry;
-                AcceptButton = primary;
-                primary.Focus();
+                ShowInstallFailure(failure);
                 return;
             }
             ShowFinished();
@@ -211,7 +254,19 @@ namespace VeyloSetup
             catch (Exception error) { status.Text = UserMessage(error); }
         }
 
-        private void Retry(object sender, EventArgs e) { StartInstall(); }
+        private void ShowInstallFailure(Exception failure)
+        {
+            title.Text = "安装未完成";
+            description.Text = "可以更换安装位置，或重试当前目录。";
+            location.Visible = true;
+            status.Text = UserMessage(failure);
+            status.ForeColor = Error;
+            status.Visible = true;
+            progress.Visible = false;
+            primary.Text = "重试";
+            primary.Visible = true;
+            primary.Focus();
+        }
 
         private void CancelInstall()
         {
@@ -230,6 +285,7 @@ namespace VeyloSetup
 
         private void ShowFinished()
         {
+            finished = true;
             title.Text = "安装完成，加载浏览器扩展";
             description.Text = "打开扩展管理页，开启「开发者模式」，选择「加载已解压的扩展程序」。";
             status.Text = "安装器会复制扩展目录。在浏览器的文件夹窗口里粘贴路径并确认。";
@@ -240,8 +296,6 @@ namespace VeyloSetup
             accounts.Visible = true;
             updates.Visible = true;
             primary.Text = browsers.Visible ? "打开扩展管理页" : "打开扩展文件夹";
-            primary.Click -= Retry;
-            primary.Click += OpenExtensions;
             primary.Visible = true;
             secondary.Text = "复制路径";
             secondary.Enabled = true;
@@ -331,7 +385,7 @@ namespace VeyloSetup
             catch (System.Runtime.InteropServices.ExternalException) { status.Text = "请手动复制扩展目录 " + installer.Extension; }
         }
 
-        private void OpenExtensions(object sender, EventArgs e)
+        private void OpenExtensions()
         {
             CopyFolder();
             try
@@ -375,17 +429,23 @@ namespace VeyloSetup
         [STAThread]
         public static int Main(string[] args)
         {
-            if (args.Length == 1 && new[] { "--quiet", "--version", "--update-components", "--restore-engine" }.Contains(args[0]))
+            if (args.Length > 0 && new[] { "--quiet", "--version", "--update-components", "--restore-engine" }.Contains(args[0]))
             {
                 // A GUI executable may have redirected standard streams but no console window.
                 // Encode the streams directly instead of changing a nonexistent console's code page.
                 using (var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true })
                 using (var errors = new StreamWriter(Console.OpenStandardError(), new UTF8Encoding(false)) { AutoFlush = true })
                 {
+                    bool custom = args.Length == 3 && args[0] == "--quiet" && args[1] == "--install-dir";
+                    if (args.Length != 1 && !custom)
+                    {
+                        errors.WriteLine("安装参数无效。请使用 --quiet 或 --quiet --install-dir <目录>。");
+                        return 2;
+                    }
                     if (args[0] == "--version") { output.WriteLine(Installer.Version); return 0; }
                     try
                     {
-                        var setup = new Installer();
+                        var setup = custom ? new Installer(args[2]) : new Installer();
                         if (args[0] == "--restore-engine") setup.RestoreBundledEngine();
                         else if (args[0] == "--update-components")
                         {
@@ -402,7 +462,9 @@ namespace VeyloSetup
             Application.SetCompatibleTextRenderingDefault(false);
             using (var window = new SetupForm())
             {
-                window.Shown += (sender, e) => window.StartInstall();
+                string manager = window.destination.Text.TrimEnd('\\') + "\\" + Installer.AppDirectory + "\\Veylo-Setup.exe";
+                if (string.Equals(Assembly.GetExecutingAssembly().Location, manager, StringComparison.OrdinalIgnoreCase))
+                    window.Shown += (sender, e) => window.StartInstall();
                 Application.Run(window);
             }
             return 0;

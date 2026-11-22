@@ -2,7 +2,7 @@ name: Clean Windows setup
 on:
   workflow_dispatch:
   push:
-    branches: [verify/setup-2.4.6]
+    branches: [verify/setup-2.4.7]
 permissions:
   contents: read
 jobs:
@@ -30,9 +30,11 @@ jobs:
           $Source = (Resolve-Path -LiteralPath 'tests/setup_layout_test.cs').Path
           & $Compiler /nologo /target:exe /platform:x64 /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll "/win32manifest:$Manifest" "/out:$LayoutCheck" $Source
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $LayoutCheck dist/Veylo-2.4.6-Setup-x64.exe
+          & $LayoutCheck dist/Veylo-2.4.7-Setup-x64.exe
       - name: Run the Setup release executable on this fresh VM
         run: python -B tests/setup_clean_install_test.py
+      - name: Install to a selected path and check browser registration
+        run: python -B tests/setup_install_directory_test.py
       - name: Test Chrome extension and guest download requests
         shell: pwsh
         run: |
@@ -54,8 +56,8 @@ jobs:
       - name: Verify native downloads, local media and Bili23 driver integrations
         shell: pwsh
         run: |
-          $env:VEYLO_TEST_FLUENT_DIR = Join-Path $env:LOCALAPPDATA 'Veylo/vendor/FluentYTDL-3.7.6'
-          $env:VEYLO_TEST_BILI_DIR = Join-Path $env:LOCALAPPDATA 'Veylo/vendor/Bili23-2.14.0'
+          $env:VEYLO_TEST_FLUENT_DIR = Join-Path $env:VEYLO_TEST_INSTALL_DIR 'vendor/FluentYTDL-3.7.6'
+          $env:VEYLO_TEST_BILI_DIR = Join-Path $env:VEYLO_TEST_INSTALL_DIR 'vendor/Bili23-2.14.0'
           python -B tests/transfer_range_test.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -B tests/download_speed_test.py
@@ -69,7 +71,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: |
-            dist/Veylo-2.4.6-Setup-x64.exe
+            dist/Veylo-2.4.7-Setup-x64.exe
             dist/SHA256SUMS.txt
             dist/clean-install-report.json
             dist/clean-browser-popup.png

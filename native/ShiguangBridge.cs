@@ -477,9 +477,16 @@ internal static class ShiguangBridge
         try
         {
             string app = Path.GetDirectoryName(Home);
-            string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Veylo");
-            if (!string.Equals(Path.GetDirectoryName(app), root, StringComparison.OrdinalIgnoreCase) ||
-                !Regex.IsMatch(Path.GetFileName(app), @"\Aapp-\d+\.\d+\.\d+\z")) return bundled;
+            string root = Path.GetDirectoryName(app);
+            if (!Regex.IsMatch(Path.GetFileName(app), @"\Aapp-\d+\.\d+\.\d+\z")) return bundled;
+            string defaultRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Veylo");
+            if (!string.Equals(root, defaultRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                var marker = new FileInfo(Path.Combine(LocalDirectory(root), ".veylo-installation"));
+                if (!marker.Exists || marker.Length != "Veylo Setup".Length ||
+                    (marker.Attributes & FileAttributes.ReparsePoint) != 0 || File.ReadAllText(marker.FullName) != "Veylo Setup")
+                    return bundled;
+            }
             string selection = Path.Combine(Home, "yt-dlp-version.txt");
             if (!File.Exists(selection) || (File.GetAttributes(selection) & FileAttributes.ReparsePoint) != 0) return bundled;
             string chosen = File.ReadAllText(selection).Trim();

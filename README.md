@@ -6,15 +6,19 @@ Veylo 是 Windows 上的非官方浏览器下载助手，支持 YouTube、X 和�
 
 ## 安装与使用
 
-**[下载 Veylo v2.4.6 Windows x64 安装器](https://github.com/foggy-m/Veylo/releases/download/v2.4.6/Veylo-2.4.6-Setup-x64.exe)**
+**[下载 Veylo v2.4.7 Windows x64 安装器](https://github.com/foggy-m/Veylo/releases/download/v2.4.7/Veylo-2.4.7-Setup-x64.exe)**
 
-适用于 Windows 10/11 x64，以及 Chrome、Edge、Tabbit 等基于 Chromium 116 或更新版本的浏览器。首次安装需要访问 GitHub，下载量约 246 MiB，建议预留 2 GB 磁盘空间。 [发布说明](https://github.com/foggy-m/Veylo/releases/tag/v2.4.6) · [SHA256 校验](https://github.com/foggy-m/Veylo/releases/download/v2.4.6/SHA256SUMS.txt)
+适用于 Windows 10/11 x64，以及 Chrome、Edge、Tabbit 等基于 Chromium 116 或更新版本的浏览器。首次安装需要访问 GitHub，下载量约 246 MiB，建议预留 2 GB 磁盘空间。 [发布说明](https://github.com/foggy-m/Veylo/releases/tag/v2.4.7) · [SHA256 校验](https://github.com/foggy-m/Veylo/releases/download/v2.4.7/SHA256SUMS.txt)
 
-1. 双击 `Veylo-2.4.6-Setup-x64.exe`，等安装器从官方发布页下载并校验 FluentYTDL、Bili23 及运行库。安装器会自动解压并配置本机桥接。
+1. 双击 `Veylo-2.4.7-Setup-x64.exe`。可直接点「安装」使用默认位置，也可点「浏览」或输入完整路径，例如 `D:\Veylo`。自选位置可以是新文件夹、空文件夹或 Setup 管理的 Veylo 安装目录。安装器会自动下载、校验并解压组件，再按实际路径连接浏览器。
 2. 安装完成后选择浏览器，点击「打开扩展管理页」。启用「开发者模式」，选择「加载已解压的扩展程序」，粘贴安装器已复制的扩展目录并确认。每个浏览器加载一次。若未进入管理页，可在 Chrome 或 Tabbit 输入 `chrome://extensions/`，在 Edge 输入 `edge://extensions/`。
-3. 打开 YouTube、X 或哔哩哔哩的视频页，点击工具栏里的 Veylo，或按 **Alt+Shift+V**，选择「下载视频」。在「任务记录」看到「已完成」后可打开文件。默认保存目录是 `%LOCALAPPDATA%\Veylo\Downloads`，也可以在扩展内另选位置。
+3. 打开 YouTube、X 或哔哩哔哩的视频页，点击工具栏里的 Veylo，或按 **Alt+Shift+V**，选择「下载视频」。在「任务记录」看到「已完成」后可打开文件。默认保存目录是安装目录下的 `Downloads`，也可以在扩展内另选位置。
 
 如果之前从源码加载过旧 Veylo，请先备份需要保留的扩展偏好和任务记录，再在扩展管理页移除旧条目，按上面的步骤加载新版目录。需要账号权限时，可在安装完成页点「打开下载器登录」，用自己的账号登录。
+
+## v2.4.7 安装目录
+
+默认安装位置为 `%LOCALAPPDATA%\Veylo`。选择其他位置时，扩展、下载组件和开始菜单入口会随所选路径配置。Setup 会记住成功安装的目录。从旧目录切换时，新位置会独立安装，旧目录里的文件继续存放在原处。浏览器已加载过旧目录时，请用安装器复制的新扩展路径重新加载。
 
 ## v2.4.6 安装器更新
 

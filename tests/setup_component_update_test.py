@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import time
 
-from setup_clean_install_test import ROOT, ORIGIN, command
+from setup_clean_install_test import APP_DIR, ROOT, ORIGIN, SETUP, assert_registrations, command
 
 
 def bridge_call(bridge, request):
@@ -43,9 +43,9 @@ def smoke_updated_x(bridge, directory):
 
 def main():
     assert os.environ.get("GITHUB_ACTIONS") == "true", "Use a clean Actions Windows profile"
-    root = Path(os.environ["LOCALAPPDATA"]) / "Veylo"
-    app = root / "app-2.4.5"
-    setup = ROOT / "dist/Veylo-2.4.6-Setup-x64.exe"
+    root = Path(os.environ["VEYLO_TEST_INSTALL_DIR"])
+    app = root / APP_DIR
+    setup = SETUP
     manager = app / "Veylo-Setup.exe"
     assert manager.read_bytes() == setup.read_bytes(), "Start-menu manager uses the verified installer"
     programs = Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs"
@@ -81,6 +81,7 @@ def main():
     assert bridge_call(bridge, {"action": "ping"})["engineSource"] == "bundled", "Malformed selection must fall back"
     selection.write_text(chosen, encoding="utf-8")
     command(setup, "--quiet", timeout=80)
+    assert_registrations(root)
     assert selection.read_text(encoding="utf-8").strip() == chosen
     assert bridge_call(bridge, {"action": "ping"})["engineSource"] == "managed", "Reinstall must preserve a valid selection"
     follow = app / "check-updates-on-open.txt"
