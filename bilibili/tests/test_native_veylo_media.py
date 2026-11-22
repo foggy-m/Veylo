@@ -1364,7 +1364,9 @@ def main():
     ap.add_argument("--release-output", type=Path)
     args = ap.parse_args()
     with tempfile.TemporaryDirectory(prefix="veylo_native_media_") as temp:
-        fixture = Path(temp)
+        # CI can provide an 8.3 TEMP path. Seed records with the long local path
+        # because the bridge normalizes the download directory before saving it.
+        fixture = Path(temp).resolve(strict=True)
         before = CHECKS
         release = native_tests(fixture, args.release_output)
         print("NATIVE_SUITE assertions=%d" % (CHECKS - before))

@@ -48,7 +48,9 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -B tests/download_speed_test.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          python -B tools/check_native.py all
+          python -B tools/check_native.py bili
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -B tools/check_native.py youtube
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: verified-veylo-setup
