@@ -26,6 +26,7 @@ def main():
     assert not install.exists() and not bili_profile.exists(), 'Use an unused Windows profile'
     print('PASS clean Windows user has neither an installation nor a Bili23 profile', flush=True)
     exe = ROOT / 'dist/Veylo-2.4.5-Setup-x64.exe'
+    assert command(exe, '--version').strip() == '2.4.5', 'GUI executable must support redirected output without a console'
     print(command(exe, '--quiet', timeout=1000), flush=True)
     app = install / 'app-2.4.5'
     fluent, bili = install / 'vendor/FluentYTDL-3.7.6', install / 'vendor/Bili23-2.14.0'

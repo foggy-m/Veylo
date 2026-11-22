@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -243,11 +244,17 @@ namespace VeyloSetup
         [STAThread]
         public static int Main(string[] args)
         {
-            if (args.Length == 1 && args[0] == "--quiet")
+            if (args.Length == 1 && (args[0] == "--quiet" || args[0] == "--version"))
             {
-                Console.OutputEncoding = System.Text.Encoding.UTF8;
-                try { new Installer().Install((message, percent) => Console.WriteLine(message), CancellationToken.None); return 0; }
-                catch (Exception error) { Console.Error.WriteLine(UserMessage(error)); return 1; }
+                // A GUI executable may have redirected standard streams but no console window.
+                // Encode the streams directly instead of changing a nonexistent console's code page.
+                using (var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true })
+                using (var errors = new StreamWriter(Console.OpenStandardError(), new UTF8Encoding(false)) { AutoFlush = true })
+                {
+                    if (args[0] == "--version") { output.WriteLine(Installer.Version); return 0; }
+                    try { new Installer().Install((message, percent) => output.WriteLine(message), CancellationToken.None); return 0; }
+                    catch (Exception error) { errors.WriteLine(UserMessage(error)); return 1; }
+                }
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
