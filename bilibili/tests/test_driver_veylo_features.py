@@ -315,7 +315,9 @@ class DriverFeatures(unittest.TestCase):
                         return SimpleNamespace(get_all_leaves=lambda: [SimpleNamespace(to_dict=lambda i=i: {"ep_id": i, "title": "e%d" % i}) for i in range(205)])
                 setattr(self.mods["util.parse.parser." + kind], "BangumiParser" if kind == "bangumi" else "CheeseParser", Parser)
                 setattr(self.mods["util.parse.episode." + kind], "BangumiEpisodeParser" if kind == "bangumi" else "CheeseEpisodeParser", Episodes)
-                leaves, title = DRIVER.parse_url("https://www.bilibili.com/%s/play/ss7" % kind, "collection")
+                with patch.object(DRIVER, "prepare_bili_metadata") as initialize:
+                    leaves, title = DRIVER.parse_url("https://www.bilibili.com/%s/play/ss7" % kind, "collection")
+                initialize.assert_called_once()
                 self.assertEqual((len(leaves), title), (200, "Season"))
                 self.assertTrue(all(leaf["_collection"] for leaf in leaves))
 
@@ -446,6 +448,37 @@ class DriverFeatures(unittest.TestCase):
                 self.assertFalse(setup.called)
                 self.assertFalse((self.jobs / (args.job_id + ".work")).exists())
 
+    def test_fresh_guest_gets_public_parser_metadata_without_saving_profile(self):
+        config_module = ModuleType("util.common.config")
+        network = ModuleType("util.network.request")
+        config = SimpleNamespace(img_key=object(), sub_key=object())
+        stored = {config.img_key: "", config.sub_key: ""}
+        config.get = stored.__getitem__
+        changes = []
+
+        def set_value(item, value, *, save):
+            changes.append(save)
+            stored[item] = value
+
+        config.set = set_value
+        config_module.config = config
+        payload = {"data": {"wbi_img": {"img_url": "https://example.invalid/" + "a" * 32 + ".png",
+                                        "sub_url": "https://example.invalid/" + "b" * 32 + ".png"}}}
+        network.SyncNetWorkRequest = lambda _: SimpleNamespace(run=lambda: payload)
+        modules = {"util.common.config": config_module, "util.network.request": network}
+        with patch.dict(sys.modules, modules):
+            DRIVER.prepare_bili_metadata()
+            self.assertEqual(stored, {config.img_key: "a" * 32, config.sub_key: "b" * 32})
+            self.assertEqual(changes, [False, False])
+            DRIVER.prepare_bili_metadata()
+            self.assertEqual(changes, [False, False])
+            stored[config.img_key] = ""
+            network.SyncNetWorkRequest = lambda _: SimpleNamespace(run=lambda: {"data": None})
+            with self.assertRaises(DRIVER.BiliMetadataUnavailable) as caught:
+                DRIVER.prepare_bili_metadata()
+            self.assertEqual(DRIVER.friendly(caught.exception), DRIVER.METADATA_UNAVAILABLE)
+            self.assertEqual(changes, [False, False])
+
     def test_no_qt_application_or_configuration_mutation_calls(self):
         tree = ast.parse((ROOT / "driver/bd_driver.py").read_text(encoding="utf-8"))
         forbidden = {"QApplication", "QCoreApplication", "setApplicationName", "setApplicationDisplayName", "setOrganizationName", "setOrganizationDomain"}
@@ -453,8 +486,11 @@ class DriverFeatures(unittest.TestCase):
             if isinstance(node, ast.Call):
                 name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr if isinstance(node.func, ast.Attribute) else ""
                 self.assertNotIn(name, forbidden)
-                self.assertFalse(isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                                 and node.func.value.id == "config" and node.func.attr in ("set", "save", "load"))
+                if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "config" and node.func.attr in ("set", "save", "load")):
+                    self.assertEqual(node.func.attr, "set")
+                    self.assertTrue(any(keyword.arg == "save" and isinstance(keyword.value, ast.Constant)
+                                        and keyword.value.value is False for keyword in node.keywords))
 
     def test_real_bili_protobuf_xml_player_and_srt_seams_offline(self):
         # Real installed modules, but stub their package-level config/Qt/network imports before executing them.

@@ -322,7 +322,7 @@ internal static class BiliBridge
             "指定音频码率需要支持 aac/libmp3lame 的完整 FFmpeg；请准备完整编码器或改选自动音质后重试。",
             "原音轨需要现有完整 FFmpeg 和同目录 ffprobe；请准备工具后重试，或选择 MP3/M4A 转换。",
             "无法确认或无损封装此原音轨；请检查媒体流，或选择 MP3/M4A 转换。", CanceledError,
-            "下载失败，请检查内容可访问性、Bili23 内核和保存目录。" };
+            "无法获取 B 站播放初始化信息，请检查网络后重试。", "下载失败，请检查内容可访问性、Bili23 内核和保存目录。" };
         return known.Contains(error) ? error : "下载失败，请检查内容可访问性、Bili23 内核和保存目录。";
     }
     static string LocalDirectory(string path)

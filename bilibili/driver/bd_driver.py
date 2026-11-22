@@ -5,7 +5,7 @@ r"""Bili23 无界面下载驱动（Veylo 本机桥接调用）。
 复用它 script\util 下的解析（含 wbi 签名、登录 Cookie）与取流逻辑，
 下载与 ffmpeg 合并在本脚本内完成，进度写回桥接的任务 JSON。
 
-不修改 Bili23 的任何文件与配置，只读取它的 config.json 与登录状态。
+读取 Bili23 的本地设置和登录状态。公开播放元数据只写入当前下载进程的内存。
 """
 
 import argparse
@@ -24,6 +24,7 @@ import time
 import traceback
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 FLUENT_PATHS = Path(__file__).resolve().parents[2] / "native" / "fluent_paths.json"
 
@@ -48,6 +49,7 @@ QUALITY_TARGET = {
 AUDIO_ENCODER_ERROR = "指定音频码率需要支持 aac/libmp3lame 的完整 FFmpeg；请准备完整编码器或改选自动音质后重试。"
 ORIGINAL_TOOLS_ERROR = "原音轨需要现有完整 FFmpeg 和同目录 ffprobe；请准备工具后重试，或选择 MP3/M4A 转换。"
 ORIGINAL_COPY_ERROR = "无法确认或无损封装此原音轨；请检查媒体流，或选择 MP3/M4A 转换。"
+METADATA_UNAVAILABLE = "无法获取 B 站播放初始化信息，请检查网络后重试。"
 WARN_DANMAKU = "弹幕下载失败，视频已保存。"
 WARN_SUBTITLE = "字幕下载失败，视频已保存。"
 WARN_FALLBACK = "该视频不属于合集，已按全部分 P 下载。"
@@ -74,6 +76,10 @@ class JobCanceled(RuntimeError):
 
 
 class RangeUnavailable(RuntimeError):
+    pass
+
+
+class BiliMetadataUnavailable(RuntimeError):
     pass
 
 
@@ -321,6 +327,8 @@ def friendly(exc: Exception) -> str:
         return ORIGINAL_COPY_ERROR
     if isinstance(exc, AudioEncoderUnavailable):
         return AUDIO_ENCODER_ERROR
+    if isinstance(exc, BiliMetadataUnavailable):
+        return METADATA_UNAVAILABLE
     text = str(exc) or type(exc).__name__
     lowered = text.lower()
     if "login" in lowered or "登录" in text or "-101" in text:
@@ -377,6 +385,33 @@ def setup_bili(bili_root: Path):
     if hasattr(os, "add_dll_directory"):
         global _DLL_HANDLE
         _DLL_HANDLE = os.add_dll_directory(pywin32_dlls)
+
+
+def prepare_bili_metadata():
+    from util.common.config import config
+    from util.network.request import SyncNetWorkRequest
+
+    # The desktop application initializes these public values before opening its
+    # parser. A freshly installed headless worker has not run that desktop flow.
+    items = (config.img_key, config.sub_key)
+
+    def valid(value):
+        return isinstance(value, str) and re.fullmatch(r"[a-fA-F0-9]{32}", value) is not None
+
+    if all(valid(config.get(item)) for item in items):
+        return
+    try:
+        payload = SyncNetWorkRequest("https://api.bilibili.com/x/web-interface/nav").run()
+        metadata = payload["data"]["wbi_img"]
+        values = [Path(urlsplit(metadata[field]).path).stem for field in ("img_url", "sub_url")]
+        if not all(valid(value) for value in values):
+            raise ValueError("Missing public playback metadata")
+    except Exception as exc:
+        # Vendor request failures vary by httpx version. Present one useful message
+        # and retain the original traceback only in the local task log.
+        raise BiliMetadataUnavailable(METADATA_UNAVAILABLE) from exc
+    for item, value in zip(items, values):
+        config.set(item, value, save=False)
 
 
 def _cap_collection(leaves):
@@ -468,6 +503,8 @@ def parse_url(url: str, part: str):
 
     worker = WorkerBase()
     parser_type = worker.get_parser_type(url)
+    if parser_type in ("video", "bangumi", "cheese"):
+        prepare_bili_metadata()
 
     if parser_type == "video":
         from util.parse.parser.video import VideoParser
