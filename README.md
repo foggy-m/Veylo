@@ -4,15 +4,25 @@ Video, your way. 好内容，随心留存。
 
 Veylo 是 Windows 上的非官方浏览器下载助手，支持 YouTube、X 和哔哩哔哩。浏览器扩展与下载组件在本机工作。
 
-## 快速安装
+## 安装与使用
 
-在 [GitHub Releases](https://github.com/foggy-m/Veylo/releases/latest) 下载并双击 `Veylo-2.4.5-Setup-x64.exe`，适用于 Windows 10/11 x64。安装器会下载、校验和配置 FluentYTDL、Bili23 及其运行库。首次需要能访问 GitHub，下载量约 246 MiB，建议预留 2 GB。
+**[下载 Veylo v2.4.5 Windows x64 安装器](https://github.com/foggy-m/Veylo/releases/download/v2.4.5/Veylo-2.4.5-Setup-x64.exe)**
 
-安装完成后，点击「打开扩展管理页」。开启「开发者模式」，选择「加载已解压的扩展程序」，粘贴安装器复制的目录并确认。每个浏览器加载一次。日常使用工具栏里的 Veylo，快捷键为 **Alt+Shift+V**。
+适用于 Windows 10/11 x64，以及 Chrome、Edge、Tabbit 等基于 Chromium 116 或更新版本的浏览器。首次安装需要访问 GitHub，下载量约 246 MiB，建议预留 2 GB 磁盘空间。 [发布说明](https://github.com/foggy-m/Veylo/releases/tag/v2.4.5) · [SHA256 校验](https://github.com/foggy-m/Veylo/releases/download/v2.4.5/SHA256SUMS.txt)
 
-默认保存目录是 `%LOCALAPPDATA%\Veylo\Downloads`。可以在扩展内另选位置。需要账号权限时，从安装器的登录入口打开对应下载器并登录自己的账号。安装器放在发布附件中，第三方程序从各自的官方发布页下载。下方是手动从源码构建的方式。
+1. 双击 `Veylo-2.4.5-Setup-x64.exe`，等安装器从官方发布页下载并校验 FluentYTDL、Bili23 及运行库。安装器会自动解压并配置本机桥接。
+2. 安装完成后选择浏览器，点击「打开扩展管理页」。启用「开发者模式」，选择「加载已解压的扩展程序」，粘贴安装器已复制的扩展目录并确认。每个浏览器加载一次。若未进入管理页，可在 Chrome 或 Tabbit 输入 `chrome://extensions/`，在 Edge 输入 `edge://extensions/`。
+3. 打开 YouTube、X 或哔哩哔哩的视频页，点击工具栏里的 Veylo，或按 **Alt+Shift+V**，选择「下载视频」。在「任务记录」看到「已完成」后可打开文件。默认保存目录是 `%LOCALAPPDATA%\Veylo\Downloads`，也可以在扩展内另选位置。
 
-公开版通过**浏览器工具栏弹窗**操作，快捷键为 **Alt+Shift+V**。为隔离网页脚本，公开版不注入网页悬浮面板，不申请站点访问权限，不向网页开放扩展资源。代码中的旧 content 面板仅作为历史回归夹具保留，manifest 不加载它。
+如果之前从源码加载过旧 Veylo，请先备份需要保留的扩展偏好和任务记录，再在扩展管理页移除旧条目，按上面的步骤加载新版目录。需要账号权限时，可在安装完成页点「打开下载器登录」，用自己的账号登录。
+
+## v2.4.5 更新
+
+- 新增 Windows x64 安装器，以及开始菜单里的「Veylo 安装与更新」。
+- 修复首次使用时缺少 FluentYTDL 配置导致的桥接报错。B 站游客下载会自动获取播放初始化信息。
+- 新增兼容组件检查、yt-dlp 独立更新与回退。新版桥接版本为 YouTube / X 1.7.3 和 B 站 1.5.3。
+
+全新 Windows 验收覆盖安装、浏览器连接、组件更新和回退。X 和 B 站的游客样本下载成功，YouTube 样本在验收机上遇到了站点登录校验。 [验收记录](https://github.com/foggy-m/Veylo/actions/runs/45001860087) · [验收报告](https://github.com/foggy-m/Veylo/releases/download/v2.4.5/clean-install-report.json) · [历史更新记录](CHANGELOG.md)
 
 ## 更新下载组件
 
@@ -24,8 +34,6 @@ Veylo 是 Windows 上的非官方浏览器下载助手，支持 YouTube、X 和�
 
 发布用的安装器和兼容清单都由 Windows 验收任务产出，完成验证后一起放在 GitHub 发布附件中。
 
-> 本仓库发布源码，不包含预编译下载器或本机组件。验证结果与覆盖范围见 [发布检查记录](PUBLICATION.md)。
-
 ## 功能
 
 - 单视频、YouTube 播放列表、B 站分 P / 合集下载，任务进度、实时下载速率、取消、重试和本机历史。
@@ -36,28 +44,23 @@ Veylo 是 Windows 上的非官方浏览器下载助手，支持 YouTube、X 和�
 
 具体能力取决于平台提供的内容、账号权限及用户安装的内核。项目不绕过平台访问控制。只下载你有权保存的内容。
 
-## 2.4.4 更新
+## 从源码构建
 
-- 任务记录显示 B/s、KB/s、MB/s 或 GB/s；速率失效、断连、进入后处理或任务结束时隐藏，避免保留旧数值。
-- B 站新下载的大文件使用经过校验的并行 Range 请求，跟随 Bili23 的线程数并限制在 1–10；服务器不支持时回退串行。小文件、未知大小和已有部分文件继续使用串行路径。
-- YouTube / X 并发分片默认选择“自动（跟随本机）”，读取 FluentYTDL 的 `concurrent_fragments`；无有效设置时使用 4，上限 16。手动单连接仍会保留。该选项仅影响支持分片的媒体。
-- 同步本机桥与安装器版本：YouTube / X 为 1.7.2，B 站为 1.5.2；保留公开版的工具栏界面、来源校验和目录防护。
+在 Windows x64 上使用 Git 检出仓库，准备 Python 3.10+ 和 Windows .NET Framework 4.x C# 编译器。在仓库根目录运行以下命令构建安装器。
 
-旧下载链路与下载器界面的并发行为确有差异，但实际速度仍受 CDN、连接预热、源格式、账号权限及合并耗时影响；本地受控测试的改善不等于所有视频都会获得固定提速。没有完成两款 GUI 同画质整段视频的计时对比。
+```powershell
+python -B setup/build.py
+```
 
-更新已有安装时，先在原安装目录分别运行 `native/build.bat` 和 `bilibili/native/build.bat` 重新编译桥，再运行相应安装脚本并重新加载扩展。仅替换扩展目录不能更新本机下载逻辑。请勿在正在下载时替换桥接程序。
+安装器、SHA256 校验文件和组件兼容清单会写入 `dist/`。
 
-## 环境
+<details>
+<summary>从源码手动安装和注册本机组件</summary>
 
-- Windows 10 / 11；Chrome、Edge 或兼容 Chromium 116+ 浏览器。
-- 可用的 Python 3.10+ 命令（实际本地验证为 Python 3.11）。
-- Windows .NET Framework 4.x C# 编译器（构建脚本会检查是否存在）。
+使用手动安装脚本时，请先准备对应的官方便携版。
+
 - YouTube / X：自行安装 FluentYTDL 完整便携版，包含 `bin/yt-dlp/yt-dlp.exe`、`bin/ffmpeg/ffmpeg.exe`；原音轨还需要同目录 `ffprobe.exe`。
 - B 站：自行安装 Bili23-Downloader 便携版，包含 `Bili23.exe`、`runtime/python.exe`、`bundle/ffmpeg.exe` 和 `script/util`。当前接口适配基于 Bili23 2.14.0，其他版本需要自行验证。
-
-下载器、运行时和 FFmpeg 的安全更新由其上游提供。本次源码检查未覆盖它们的全部实现及已知漏洞版本。
-
-## 首次安装
 
 1. 将源码放在可写的普通本机目录，例如 `C:\Apps\Veylo`，不要从网络共享或目录链接启动。
 2. YouTube / X：可将 FluentYTDL 便携版放在桌面的 `FluentYTDL-3.7.6-win64-full`，或在 `native/fluent_paths.json` 中指定实际位置：
@@ -76,19 +79,19 @@ Veylo 是 Windows 上的非官方浏览器下载助手，支持 YouTube、X 和�
 
    该脚本构建 B 站组件，然后检测、自检并注册。B 站音频优先读取同一份 `native/fluent_paths.json`；未配置时再检查桌面的 FluentYTDL 目录或桌面 `Applications`。显式配置只接受本机普通路径，拒绝目录链接和重解析点。找不到所需编码器或 ffprobe 时会给出错误。
 5. 打开 `chrome://extensions/` 或 `edge://extensions/`，开启开发者模式，加载项目中的 `extension` 目录。
-6. 点击工具栏 Veylo 图标，检查本机连接，再提交下载。连接成功只证明组件和引擎可用，不代表真实平台下载已经验证。
+6. 点击工具栏 Veylo 图标，检查本机连接，再提交一个下载任务验证。
 
 本机组件名称为 `com.veylo.youtube_x` / `com.veylo.bilibili`，固定扩展 ID 为 `ikaahmfclfkamdgikchmjnoalpklkddk`。manifest 的 `key` 是用于固定身份的公钥，可以公开。v2.4.5 使用新的注册名称，与旧版 `com.shiguang.*` 注册分开。
 
-安装器只写当前用户的注册项。遇到既有其他路径或未知归属注册会停止，不会强行覆盖。如果已经安装旧版，请先记录原有安装位置，再按明确的迁移方案更新；不要通过删除未知注册来绕过检查。升级后重新加载扩展，并刷新此前打开的平台网页，清除旧面板。
+手动安装脚本只写入当前用户的注册项。遇到其他路径或未知归属的注册时，请核对原安装位置。更新源码版时，等现有任务结束，再用 `native/build.bat` 和 `bilibili/native/build.bat` 重新编译桥接组件，运行相应的安装脚本并重新加载扩展。
+
+</details>
 
 ## 隐私与公开范围
 
-此仓库使用独立文件清单创建，包含源码、测试、静态素材和第三方图标授权。没有发布 Cookie、浏览器配置文件、下载历史、任务日志、个人绝对路径、旧归档或预编译 EXE；也没有把本地使用记录导入 Git 历史。
+Git 仓库包含源码、测试、静态素材和第三方图标授权。Windows 安装器由验收任务构建，发布在 GitHub Releases。公开版把下载操作限制在扩展的工具栏弹窗，网页浮层源码仅用于历史回归测试。
 
-扩展偏好和任务记录保存在本机。下载内核可以使用你在其软件中保存的登录状态；这不表示 Cookie 可以公开。平台请求、账号登录和可选 SponsorBlock 请求仍会连接相应服务。遇到问题时不要把完整配置、Cookie 或日志原文贴进公开 issue。
-
-安全检查结果及限制见 [发布检查记录](PUBLICATION.md)。
+扩展偏好、任务记录和账号资料保存在本机。下载内核可以使用你在对应下载器中保存的登录状态。平台请求、账号登录和可选 SponsorBlock 请求仍会连接相应服务。公开反馈前，请移除配置和日志中的 Cookie、账号信息和个人路径。 [v2.4.4 历史源码安全检查](PUBLICATION.md)
 
 ## 开发验证
 
