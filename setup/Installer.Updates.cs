@@ -129,31 +129,16 @@ namespace VeyloSetup
                 if (!matches) Files.CopyAtomic(running, installed);
             }
 
-            string programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
-            if (programs.Length == 0) return;
-            object shell = null, shortcut = null;
             try
             {
-                var shellType = Type.GetTypeFromProgID("WScript.Shell");
-                if (shellType == null) return;
-                string path = Path.Combine(programs, "Veylo 安装与更新.lnk");
-                Files.PlainPath(path);
-                shell = Activator.CreateInstance(shellType);
-                shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { path });
-                Type shortcutType = shortcut.GetType();
-                shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { installed });
-                shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { App });
-                shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, new object[0]);
+                string programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs, Environment.SpecialFolderOption.Create);
+                if (programs.Length == 0)
+                    programs = Files.Inside(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Microsoft/Windows/Start Menu/Programs");
+                Shortcut.Save(Path.Combine(Files.MakeDirectory(programs), "Veylo 安装与更新.lnk"), installed, App);
             }
             catch (COMException) { }
-            catch (TargetInvocationException) { }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
-            finally
-            {
-                if (shortcut != null && Marshal.IsComObject(shortcut)) Marshal.ReleaseComObject(shortcut);
-                if (shell != null && Marshal.IsComObject(shell)) Marshal.ReleaseComObject(shell);
-            }
         }
 
         private static ReleaseCatalog.Release ReadLatest(Download download, string repository, CancellationToken cancel)
@@ -364,8 +349,8 @@ namespace VeyloSetup
         {
             using (LockInstall())
             {
-                Files.WriteAtomic(EngineSelection, "");
                 TrackUpdates = false;
+                Files.WriteAtomic(EngineSelection, "");
             }
         }
     }
