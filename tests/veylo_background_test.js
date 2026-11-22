@@ -9,8 +9,8 @@ const BILI = 'https://www.bilibili.com/video/BV1GJ411x7h7';
 const XURL = 'https://x.com/example/status/1234567890';
 const PLAYLIST = 'https://www.youtube.com/playlist?list=PLfixture';
 const BANGUMI = 'https://www.bilibili.com/bangumi/play/ep123456';
-const SG_HOST = 'com.shiguang.fluentytdl_bridge';
-const BILI_HOST = 'com.shiguang.bili_bridge';
+const SG_HOST = 'com.veylo.youtube_x';
+const BILI_HOST = 'com.veylo.bilibili';
 const FEATURES = {
   [SG_HOST]: ['cancel', 'sponsorblock', 'sections', 'playlist', 'live', 'pick-folder-initial', 'login-status', 'thumbnail', 'chapters', 'archive', 'transfer', 'open-file'],
   [BILI_HOST]: ['cancel', 'danmaku', 'subtitles', 'collection', 'pick-folder-initial', 'login-status', 'open-file']
@@ -321,7 +321,7 @@ function setup(initial = {}, options = {}) {
     late.hooks.noticeClick(noticeId);
     await new Promise(resolve => setTimeout(resolve, 10));
     assert.equal(folderCalls().length, 1);
-    assert.equal(folderCalls()[0].host, 'com.shiguang.bili_bridge');
+    assert.equal(folderCalls()[0].host, 'com.veylo.bilibili');
     late.hooks.noticeButton(noticeId, 1);
     late.hooks.noticeClick('unrelated-notice');
     late.hooks.noticeClick(`veylo:bili:${'f'.repeat(32)}`);
@@ -417,7 +417,7 @@ function setup(initial = {}, options = {}) {
     const supported = setup();
     assert.equal((await supported.send({ type: 'sg-deliver', mode: 'direct', url: BILI, media: 'audio-m4a', audioQuality: '256' })).ok, true);
     const ping = supported.nativeCalls.find(call => call.message.action === 'ping');
-    assert.equal(ping.host, 'com.shiguang.bili_bridge');
+    assert.equal(ping.host, 'com.veylo.bilibili');
   });
   await test('a malformed stored audio bitrate is not silently converted on retry', async () => {
     const audio = setup();
@@ -448,7 +448,7 @@ function setup(initial = {}, options = {}) {
       const accepted = await original.send({ type: 'sg-deliver', mode: 'direct', url, media: 'audio-original', audioQuality: '320' });
       assert.equal(accepted.ok, true);
       const sent = original.nativeCalls.at(-1);
-      assert.equal(sent.host, platform === 'bili' ? 'com.shiguang.bili_bridge' : 'com.shiguang.fluentytdl_bridge');
+      assert.equal(sent.host, platform === 'bili' ? 'com.veylo.bilibili' : 'com.veylo.youtube_x');
       assert.equal(sent.message.media, 'audio-original');
       assert.equal(sent.message.audioQuality, 'auto');
       assert.equal(sent.message.quality, 'best');
@@ -482,7 +482,7 @@ function setup(initial = {}, options = {}) {
     const supported = setup();
     assert.equal((await supported.send({ type: 'sg-deliver', mode: 'direct', url: BILI, media: 'audio-original' })).ok, true);
     const ping = supported.nativeCalls.find(call => call.message.action === 'ping');
-    assert.equal(ping.host, 'com.shiguang.bili_bridge');
+    assert.equal(ping.host, 'com.veylo.bilibili');
     assert.deepEqual(ping.message, { action: 'ping' });
   });
   await test('retry preserves original mode and legacy conversion settings instead of following current preferences', async () => {

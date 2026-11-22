@@ -2,7 +2,15 @@
 
 Video, your way. 好内容，随心留存。
 
-Veylo 是 Windows 上的非官方浏览器下载助手，支持 YouTube、X 和哔哩哔哩。浏览器界面版本 **2.4.4**，通过本机组件调用用户自行安装的 FluentYTDL / Bili23-Downloader；项目不提供云端下载服务，也不打包第三方下载器。
+Veylo 是 Windows 上的非官方浏览器下载助手，支持 YouTube、X 和哔哩哔哩。浏览器扩展与下载组件在本机工作。
+
+## 快速安装
+
+在 [GitHub Releases](https://github.com/foggy-m/Veylo/releases/latest) 下载并双击 `Veylo-2.4.5-Setup-x64.exe`，适用于 Windows 10/11 x64。安装器会下载、校验和配置 FluentYTDL、Bili23 及其运行库。首次需要能访问 GitHub，下载量约 246 MiB，建议预留 2 GB。
+
+安装完成后，点击「打开扩展管理页」。开启「开发者模式」，选择「加载已解压的扩展程序」，粘贴安装器复制的目录并确认。每个浏览器加载一次。日常使用工具栏里的 Veylo，快捷键为 **Alt+Shift+V**。
+
+默认保存目录是 `%LOCALAPPDATA%\Veylo\Downloads`。可以在扩展内另选位置。需要账号权限时，从安装器的登录入口打开对应下载器并登录自己的账号。安装器放在发布附件中，第三方程序从各自的官方发布页下载。下方是手动从源码构建的方式。
 
 公开版通过**浏览器工具栏弹窗**操作，快捷键为 **Alt+Shift+V**。为隔离网页脚本，公开版不注入网页悬浮面板，不申请站点访问权限，不向网页开放扩展资源。代码中的旧 content 面板仅作为历史回归夹具保留，manifest 不加载它。
 
@@ -60,7 +68,7 @@ Veylo 是 Windows 上的非官方浏览器下载助手，支持 YouTube、X 和�
 5. 打开 `chrome://extensions/` 或 `edge://extensions/`，开启开发者模式，加载项目中的 `extension` 目录。
 6. 点击工具栏 Veylo 图标，检查本机连接，再提交下载。连接成功只证明组件和引擎可用，不代表真实平台下载已经验证。
 
-本机组件兼容名称仍为 `com.shiguang.fluentytdl_bridge` / `com.shiguang.bili_bridge`，固定扩展 ID 为 `ikaahmfclfkamdgikchmjnoalpklkddk`。manifest 的 `key` 是用于固定身份的公钥，可以公开。
+本机组件名称为 `com.veylo.youtube_x` / `com.veylo.bilibili`，固定扩展 ID 为 `ikaahmfclfkamdgikchmjnoalpklkddk`。manifest 的 `key` 是用于固定身份的公钥，可以公开。v2.4.5 使用新的注册名称，与旧版 `com.shiguang.*` 注册分开。
 
 安装器只写当前用户的注册项。遇到既有其他路径或未知归属注册会停止，不会强行覆盖。如果已经安装旧版，请先记录原有安装位置，再按明确的迁移方案更新；不要通过删除未知注册来绕过检查。升级后重新加载扩展，并刷新此前打开的平台网页，清除旧面板。
 

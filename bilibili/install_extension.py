@@ -17,10 +17,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 EXT_DIR = ROOT.parent / 'extension'
-HOST_NAME = 'com.shiguang.bili_bridge'
+HOST_NAME = 'com.veylo.bilibili'
 HOST_MANIFEST = ROOT / 'native' / (HOST_NAME + '.json')
 HOST_EXE = ROOT / 'native' / 'BiliBridge.exe'
-HOST_VERSION = '1.5.2'
+HOST_VERSION = '1.5.3'
 BILI_PATHS = ROOT / 'native' / 'bili_paths.json'
 MAX_PING_FRAME_SIZE = 65536
 DESKTOP = Path.home() / 'Desktop'

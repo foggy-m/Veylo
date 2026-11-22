@@ -299,19 +299,19 @@ def native_tests(fixture, release_output):
     compile_cs(isolated_source, isolated_release)
     env = dict(os.environ, BILI_TEST_CONFIG=str(cfg))
     release_ping = call(isolated_release, {"action": "ping"}, env)
-    check(release_ping["version"] == "1.5.2" and release_ping.get("audioQualityOptions") == ["auto", "320", "256", "192", "128"], "release candidate ping contract")
+    check(release_ping["version"] == "1.5.3" and release_ping.get("audioQualityOptions") == ["auto", "320", "256", "192", "128"], "release candidate ping contract")
     release_invalid = call(release, {"action": "bili-download", "url": "https://www.bilibili.com/video/BV1GJ411x7h7", "audioQuality": None}, env)
     check(release_invalid.get("ok") is False and "audioQuality" in release_invalid.get("error", ""), "release rejects invalid audioQuality before reading any real configuration")
     ping = call(exe, {"action": "ping"}, env)
     job_read_contention_tests(fixture, exe, env, downloads)
-    check(ping["version"] == "1.5.2" and ping["engineAvailable"], "Bili ping version and isolated engine")
+    check(ping["version"] == "1.5.3" and ping["engineAvailable"], "Bili ping version and isolated engine")
     check(ping.get("audioQualityOptions") == ["auto", "320", "256", "192", "128"], "Bili advertises audio quality contract")
     check(ping.get("mediaOptions") == ["video", "audio-original", "audio-mp3", "audio-m4a"]
           and release_ping.get("mediaOptions") == ping["mediaOptions"], "Bili advertises exact original media contract in test/release")
     assembly = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
         "[Reflection.AssemblyName]::GetAssemblyName('" + str(release).replace("'", "''") + "').Version.ToString()"],
         capture_output=True, timeout=15)
-    check(assembly.returncode == 0 and assembly.stdout.decode().strip() == "1.5.2.0", "Bili assembly version")
+    check(assembly.returncode == 0 and assembly.stdout.decode().strip() == "1.5.3.0", "Bili assembly version")
     base = {"action": "bili-download", "url": "https://www.bilibili.com/video/BV1GJ411x7h7"}
     for changed in ({"media": "mp3"}, {"media": 1}, {"media": None}, {"media": "audio-mp3 --exec bad"},
                     {"subtitles": "manual"}, {"subtitles": "auto", "media": "audio-m4a"}, {"subtitles": True},

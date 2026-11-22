@@ -1,0 +1,26 @@
+{
+  "fluent": {
+    "name": "FluentYTDL 3.7.6 full (Windows x64)",
+    "filename": "FluentYTDL-3.7.6-win64-full.7z",
+    "url": "https://github.com/SakuraForgot/FluentYTDL/releases/download/v3.7.6/FluentYTDL-3.7.6-win64-full.7z",
+    "size": 215695475,
+    "sha256": "15f4675c88846a9aa12b73dc62c641681798b857979ff7d99b403e03b9bb36b9",
+    "source": "https://github.com/SakuraForgot/FluentYTDL/releases/tag/v3.7.6"
+  },
+  "bili": {
+    "name": "Bili23-Downloader 2.14.0 portable (Windows x64)",
+    "filename": "Bili23-Downloader_2.14.0_windows_x64_portable.zip",
+    "url": "https://github.com/ScottSloan/Bili23-Downloader/releases/download/v2.14.0/Bili23-Downloader_2.14.0_windows_x64_portable.zip",
+    "size": 41507213,
+    "sha256": "53cc8fc78dc60cdfff308cabec2159ffbd1f75e61e3b1249f7913c5f6bb40619",
+    "source": "https://github.com/ScottSloan/Bili23-Downloader/releases/tag/v2.14.0"
+  },
+  "extractor": {
+    "name": "7-Zip 26.05 standalone extractor",
+    "filename": "7zr.exe",
+    "url": "https://github.com/ip7z/7zip/releases/download/26.05/7zr.exe",
+    "size": 602624,
+    "sha256": "9bf582b894dfa665f852d7e9112b02290a1c303c2d95a21fcdc41ffcb03143b7",
+    "source": "https://www.7-zip.org/download.html"
+  }
+}

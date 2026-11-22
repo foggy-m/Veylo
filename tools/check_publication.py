@@ -34,7 +34,7 @@ def main():
         if (set(item.parts) & BLOCKED_PARTS or any(part.startswith(("native_veylo_run_", "_archive")) for part in item.parts)
             or item.suffix.lower() in BLOCKED_SUFFIXES or item.name.startswith(".env")
             or item.name in {"Cookies", "LocalState", "Local State", "config.ini", "config.json"}
-            or item.name.endswith("_paths.json") or item.name.startswith("com.shiguang.")
+            or item.name.endswith("_paths.json") or item.name.startswith(("com.shiguang.", "com.veylo."))
             or ("cookie" in item.name.lower() and item.suffix.lower() in {".txt", ".json"})):
             issues.append({"path": path, "category": "private_or_generated_file"})
         entries.append((path, sha))

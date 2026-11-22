@@ -15,12 +15,14 @@ using System.Web.Script.Serialization;
 
 [assembly: System.Reflection.AssemblyTitle("Veylo")]
 [assembly: System.Reflection.AssemblyProduct("Veylo")]
-[assembly: System.Reflection.AssemblyVersion("1.5.2.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.5.2.0")]
+[assembly: System.Reflection.AssemblyVersion("1.5.3.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.5.3.0")]
 
 internal static class BiliBridge
 {
-    const string Version = "1.5.2";
+    const string Version = "1.5.3";
+    const string ConfigError = "Bili23 配置无法读取或格式有误。请在 Bili23 中重新保存设置后重试。";
+    const string SaveDirectoryError = "保存目录无法写入。请在 Veylo 中选择一个可写的本机文件夹。";
     const string CanceledError = "已取消下载。";
     const int MaxMessage = 65536;
     const string ExtensionOrigin = "chrome-extension://ikaahmfclfkamdgikchmjnoalpklkddk/";
@@ -542,13 +544,7 @@ static object OpenJobFile(Dictionary<string, object> msg)
                 string dir;
                 login = BiliLogin(out dir);
                 string custom = Text(msg, "dir").Trim();
-                if (custom != "")
-                {
-                    if (!Path.IsPathRooted(custom) || custom.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
-                        throw new InvalidOperationException("保存目录无效，请重新选择文件夹。");
-                    dir = Path.GetFullPath(custom);
-                    if (File.Exists(dir)) throw new InvalidOperationException("保存目录不是文件夹，请重新选择。");
-                }
+                dir = EnsureSaveDirectory(custom == "" ? dir : custom);
                 foreach (string file in Directory.GetFiles(Jobs, "*.json"))
                 {
                     Dictionary<string, object> old;
@@ -562,7 +558,6 @@ static object OpenJobFile(Dictionary<string, object> msg)
                         && new[] { "queued", "downloading" }.Contains(Text(old, "state")) && !File.Exists(CancelFile(Text(old, "id"))) && (WorkerAlive(old) || Age(old) < 30))
                         return new { ok = true, jobId = Text(old, "id"), downloadDir = Text(old, "downloadDir"), login = old["login"], warnings = SafeWarnings(old) };
                 }
-                Directory.CreateDirectory(dir);
                 string id = Guid.NewGuid().ToString("N");
                 var job = new Dictionary<string, object> {
                     { "id", id }, { "url", url }, { "part", part }, { "quality", quality }, { "platform", "bilibili" },
@@ -585,6 +580,33 @@ static object OpenJobFile(Dictionary<string, object> msg)
         }
     }
 
+    static string EnsureSaveDirectory(string value)
+    {
+        if (!Regex.IsMatch(value, @"^[A-Za-z]:[\\/]") || value.Any(char.IsControl))
+            throw new InvalidOperationException(SaveDirectoryError);
+        try
+        {
+            string full = Path.GetFullPath(value);
+            string existing = full;
+            while (!Directory.Exists(existing))
+            {
+                if (File.Exists(existing)) throw new InvalidOperationException(SaveDirectoryError);
+                existing = Path.GetDirectoryName(existing);
+                if (string.IsNullOrEmpty(existing)) throw new InvalidOperationException(SaveDirectoryError);
+            }
+            LocalDirectory(existing);
+            Directory.CreateDirectory(full);
+            full = LocalDirectory(full);
+            string probe = Path.Combine(full, ".veylo-write-" + Guid.NewGuid().ToString("N"));
+            using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose)) { }
+            return full;
+        }
+        catch (IOException) { throw new InvalidOperationException(SaveDirectoryError); }
+        catch (UnauthorizedAccessException) { throw new InvalidOperationException(SaveDirectoryError); }
+        catch (ArgumentException) { throw new InvalidOperationException(SaveDirectoryError); }
+        catch (NotSupportedException) { throw new InvalidOperationException(SaveDirectoryError); }
+    }
+
     static bool BiliLogin(out string downloadDir)
     {
         // 只读 Bili23 的 config.json：下载目录 + 登录标记，不读取、不输出 Cookie 值。
@@ -596,13 +618,26 @@ static object OpenJobFile(Dictionary<string, object> msg)
         string config = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Bili23 Downloader", "config.json");
 #endif
-        if (!File.Exists(config)) throw new InvalidOperationException("找不到 Bili23 配置（%APPDATA%\\Bili23 Downloader\\config.json），请先运行一次 Bili23 并设置下载目录。");
-        var data = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(config, Encoding.UTF8));
+        Dictionary<string, object> data;
+        try { data = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(config, Encoding.UTF8)); }
+        catch (FileNotFoundException) { data = new Dictionary<string, object>(); }
+        catch (DirectoryNotFoundException) { data = new Dictionary<string, object>(); }
+        catch (IOException) { throw new InvalidOperationException(ConfigError); }
+        catch (UnauthorizedAccessException) { throw new InvalidOperationException(ConfigError); }
+        catch (ArgumentException) { throw new InvalidOperationException(ConfigError); }
+        catch (InvalidOperationException) { throw new InvalidOperationException(ConfigError); }
+        if (data == null) throw new InvalidOperationException(ConfigError);
         object section;
         string dir = "";
         if (data.TryGetValue("Download", out section) && section is Dictionary<string, object>)
             dir = Text((Dictionary<string, object>)section, "download_path").Trim();
-        if (dir == "" || !Path.IsPathRooted(dir) || dir.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+        if (dir == "")
+        {
+            string paths = Path.Combine(Home, "bili_paths.json");
+            if (File.Exists(paths)) dir = Text(Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(paths, Encoding.UTF8)), "download_dir").Trim();
+            if (dir == "") dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Veylo");
+        }
+        if (!Path.IsPathRooted(dir) || dir.Any(char.IsControl))
             throw new InvalidOperationException("Bili23 的下载目录无效，请先在软件设置中保存下载目录。");
         downloadDir = Path.GetFullPath(dir);
         bool login = false;

@@ -943,17 +943,17 @@ def main():
             return json.loads(result.stdout)
 
         ping = call(exe, {"action": "ping"}, env)
-        check(ping["version"] == "1.7.2" and ping["engineAvailable"] and ping["appRoot"] == str(app), "test ping/version")
+        check(ping["version"] == "1.7.3" and ping["engineAvailable"] and ping["appRoot"] == str(app), "test ping/version")
         check(ping.get("audioQualityOptions") == ["auto", "320", "256", "192", "128"], "explicit audio capability advertised")
         check(ping.get("mediaOptions") == ["video", "audio-original", "audio-mp3", "audio-m4a"], "original audio capability advertised")
         prod_ping = call(release_runner, {"action": "ping"}, release_env)
-        check(prod_ping["version"] == "1.7.2" and prod_ping["appRoot"] == str(app) and prod_ping["engineAvailable"], "isolated release ping/version/root/engine")
+        check(prod_ping["version"] == "1.7.3" and prod_ping["appRoot"] == str(app) and prod_ping["engineAvailable"], "isolated release ping/version/root/engine")
         check(prod_ping.get("mediaOptions") == ping["mediaOptions"], "release original capability matches test host")
         check(ping.get("features") == FEATURES and prod_ping.get("features") == FEATURES, "exact ordered feature list (test + release)")
         check(ping.get("login") == {"youtube": "guest", "x": "guest"} and prod_ping.get("login") == {"youtube": "guest", "x": "guest"}, "login status shape")
         check(call(release_runner, {"action": "test-pick-folder-initial", "initialDir": "C:\\"}, release_env).get("ok") is False, "test-only action absent from release")
         info = release_info("metadata")
-        check(info["version"] == "1.7.2.0" and info["fileVersion"] == "1.7.2.0", "release assembly/file version")
+        check(info["version"] == "1.7.3.0" and info["fileVersion"] == "1.7.3.0", "release assembly/file version")
         check(info["dialogMethods"] == ["Show", "SetFileTypes", "SetFileTypeIndex", "GetFileTypeIndex", "Advise", "Unadvise", "SetOptions", "GetOptions",
                                          "SetDefaultFolder", "SetFolder", "GetFolder", "GetCurrentSelection", "SetFileName", "GetFileName", "SetTitle",
                                          "SetOkButtonLabel", "SetFileNameLabel", "GetResult", "AddPlace", "SetDefaultExtension", "Close", "SetClientGuid", "ClearClientData", "SetFilter"]

@@ -153,7 +153,7 @@ async function check(name, body) {
     const h = createBackgroundHarness();
     const accepted = await request(h, { type: 'sg-deliver', url: 'https://mobile.twitter.com/mock/status/123/video/1?s=20', quality: '720' });
     assert.deepEqual(accepted, { ...h.controls.nativeResult, platform: 'x', url: xUrl });
-    assert.deepEqual(h.nativeCalls, [{ host: 'com.shiguang.fluentytdl_bridge', message: {
+    assert.deepEqual(h.nativeCalls, [{ host: 'com.veylo.youtube_x', message: {
       action: 'yt-download', url: xUrl, ...nativeDownloadOptions, quality: '720'
     } }]);
     assert.deepEqual(h.store.sg_last_job, { id: jobId, url: xUrl, downloadDir: 'D:\\MockDownloads', platform: 'x' });
@@ -174,7 +174,7 @@ async function check(name, body) {
     assert.equal(h.messages.length, 0);
     assert.equal(h.creates.length, 0);
     await request(h, { type: 'sg-deliver', url: xUrl });
-    assert.deepEqual(h.nativeCalls[1], { host: 'com.shiguang.fluentytdl_bridge', message: {
+    assert.deepEqual(h.nativeCalls[1], { host: 'com.veylo.youtube_x', message: {
       action: 'yt-download', url: xUrl, ...nativeDownloadOptions
     } });
     assert.equal(h.nativeCalls[1].message.quality, 'best');
@@ -183,11 +183,11 @@ async function check(name, body) {
 
   await check('default direct downloads use strict legacy hosts without new fields or ping', async () => {
     const targets = [
-      { platform: 'youtube', url: videoUrl, host: 'com.shiguang.fluentytdl_bridge', action: 'yt-download',
+      { platform: 'youtube', url: videoUrl, host: 'com.veylo.youtube_x', action: 'yt-download',
         extras: { sponsorblock: 'off', section: '', playlist: false, items: '', live: 'off', liveMaxMinutes: 240 } },
-      { platform: 'x', url: xUrl, host: 'com.shiguang.fluentytdl_bridge', action: 'yt-download',
+      { platform: 'x', url: xUrl, host: 'com.veylo.youtube_x', action: 'yt-download',
         extras: { sponsorblock: 'off', section: '', playlist: false, items: '', live: 'off', liveMaxMinutes: 240 } },
-      { platform: 'bili', url: 'https://www.bilibili.com/video/BV1xx411c7mD', host: 'com.shiguang.bili_bridge', action: 'bili-download',
+      { platform: 'bili', url: 'https://www.bilibili.com/video/BV1xx411c7mD', host: 'com.veylo.bilibili', action: 'bili-download',
         extras: { danmaku: 'off', biliSubtitles: 'off' } }
     ];
     for (const { platform, url, host, action, extras } of targets) {
@@ -322,7 +322,7 @@ async function check(name, body) {
       const nativeResult = { ok: true, version: 'mock-version', engineAvailable };
       const h = createBackgroundHarness({ nativeResult });
       assert.deepEqual(await request(h, { type: 'sg-bridge-ping' }), { ...nativeResult, features: [], login: {} });
-      assert.deepEqual(h.nativeCalls[0], { host: 'com.shiguang.fluentytdl_bridge', message: { action: 'ping' } });
+      assert.deepEqual(h.nativeCalls[0], { host: 'com.veylo.youtube_x', message: { action: 'ping' } });
     }
   });
 
@@ -342,7 +342,7 @@ async function check(name, body) {
       assert.equal(refreshed.jobs[0].notified, true);
       assert.equal(refreshed.jobs[0].connectionError, '');
       assert.deepEqual(h.store.sg_history_v2, refreshed.jobs);
-      assert.deepEqual(h.nativeCalls[1], { host: 'com.shiguang.fluentytdl_bridge', message: { action: 'job-status', jobId } });
+      assert.deepEqual(h.nativeCalls[1], { host: 'com.veylo.youtube_x', message: { action: 'job-status', jobId } });
       assert.deepEqual(h.actionCalls.slice(-3), [
         { method: 'setBadgeBackgroundColor', value: { color: '#15282c' } },
         { method: 'setBadgeText', value: { text: '' } },

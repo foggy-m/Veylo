@@ -13,10 +13,10 @@ import winreg
 
 ROOT = Path(__file__).resolve().parent
 EXT_DIR = ROOT / 'extension'
-HOST_NAME = 'com.shiguang.fluentytdl_bridge'
+HOST_NAME = 'com.veylo.youtube_x'
 HOST_MANIFEST = ROOT / 'native' / (HOST_NAME + '.json')
 HOST_EXE = ROOT / 'native' / 'ShiguangBridge.exe'
-HOST_VERSION = '1.7.2'
+HOST_VERSION = '1.7.3'
 MAX_PING_FRAME_SIZE = 65536
 DESKTOP = Path.home() / 'Desktop'
 BROWSERS = [

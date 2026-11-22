@@ -1,0 +1,61 @@
+name: Clean Windows setup
+on:
+  workflow_dispatch:
+  push:
+    branches: [verify/setup-2.4.5]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-2025
+    timeout-minutes: 32
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Check public files and build Setup
+        shell: pwsh
+        run: |
+          python -B tools/check_publication.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -B setup/build.py
+      - name: Run the Setup release executable on this fresh VM
+        run: python -B tests/setup_clean_install_test.py
+      - name: Test Chrome extension and guest download requests
+        shell: pwsh
+        run: |
+          $PlaywrightPath = Join-Path $env:RUNNER_TEMP 'veylo-playwright'
+          npm install --no-audit --no-fund --ignore-scripts --prefix $PlaywrightPath playwright@1.65.1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:VEYLO_PLAYWRIGHT = Join-Path $PlaywrightPath 'node_modules/playwright'
+          node (Join-Path $env:VEYLO_PLAYWRIGHT 'cli.js') install chromium --no-shell
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tests/setup_browser_test.cjs
+      - name: Verify cold start regression and existing extension behavior
+        shell: pwsh
+        run: |
+          python -B tests/cold_start_test.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -B tools/check.py
+      - name: Verify native downloads, local media and Bili23 driver integrations
+        shell: pwsh
+        run: |
+          $env:VEYLO_TEST_FLUENT_DIR = Join-Path $env:LOCALAPPDATA 'Veylo/vendor/FluentYTDL-3.7.6'
+          $env:VEYLO_TEST_BILI_DIR = Join-Path $env:LOCALAPPDATA 'Veylo/vendor/Bili23-2.14.0'
+          python -B tests/transfer_range_test.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -B tests/download_speed_test.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -B tools/check_native.py all
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verified-veylo-setup
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            dist/Veylo-2.4.5-Setup-x64.exe
+            dist/SHA256SUMS.txt
+            dist/clean-install-report.json
+            dist/clean-browser-popup.png

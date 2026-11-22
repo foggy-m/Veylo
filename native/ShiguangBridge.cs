@@ -15,12 +15,14 @@ using System.Web.Script.Serialization;
 
 [assembly: System.Reflection.AssemblyTitle("Veylo")]
 [assembly: System.Reflection.AssemblyProduct("Veylo")]
-[assembly: System.Reflection.AssemblyVersion("1.7.2.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.7.2.0")]
+[assembly: System.Reflection.AssemblyVersion("1.7.3.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.7.3.0")]
 
 internal static class ShiguangBridge
 {
-    const string Version = "1.7.2";
+    const string Version = "1.7.3";
+    const string ConfigError = "FluentYTDL 配置无法读取或格式有误。请在 FluentYTDL 中重新保存设置后重试。";
+    const string SaveDirectoryError = "保存目录无法写入。请在 Veylo 中选择一个可写的本机文件夹。";
     const string CanceledError = "已取消下载。";
     const string LiveCapError = "直播录制已达到时长上限，未生成文件。";
     const string SponsorAll = "sponsor,selfpromo,interaction,intro,outro,preview,music_offtopic,filler";
@@ -381,7 +383,7 @@ internal static class ShiguangBridge
     static object Dispatch(Dictionary<string, object> msg)
     {
         string action = Text(msg, "action");
-        if (action == "ping") return new { ok = true, version = Version, appRoot = AppDir ?? "", engineAvailable = File.Exists(Engine()) && File.Exists(Path.Combine(AppDir ?? "", "bin", "ffmpeg", "ffmpeg.exe")),
+        if (action == "ping") return new { ok = true, version = Version, appRoot = AppDir ?? "", engineAvailable = UsableApp(AppDir),
             audioQualityOptions = new[] { "auto", "320", "256", "192", "128" },
             mediaOptions = new[] { "video", "audio-original", "audio-mp3", "audio-m4a" },
             features = new[] { "cancel", "sponsorblock", "sections", "playlist", "live", "pick-folder-initial", "login-status", "thumbnail", "chapters", "archive", "transfer", "open-file" },
@@ -468,6 +470,60 @@ internal static class ShiguangBridge
             && File.Exists(Path.Combine(root, "bin", "ffmpeg", "ffmpeg.exe"));
     }
     static string Engine() { return Path.Combine(AppDir ?? "", "bin", "yt-dlp", "yt-dlp.exe"); }
+
+    static Dictionary<string, object> ReadFluentSettings()
+    {
+        try
+        {
+            var settings = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(AppDir, "config.json"), Encoding.UTF8));
+            if (settings == null) throw new InvalidOperationException(ConfigError);
+            return settings;
+        }
+        catch (FileNotFoundException) { return new Dictionary<string, object>(); }
+        catch (IOException) { throw new InvalidOperationException(ConfigError); }
+        catch (UnauthorizedAccessException) { throw new InvalidOperationException(ConfigError); }
+        catch (ArgumentException) { throw new InvalidOperationException(ConfigError); }
+        catch (InvalidOperationException) { throw new InvalidOperationException(ConfigError); }
+    }
+
+    static string DefaultSaveDirectory()
+    {
+        string settings = Path.Combine(Home, "fluent_paths.json");
+        if (File.Exists(settings))
+        {
+            var paths = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(settings, Encoding.UTF8));
+            string configured = Text(paths, "download_dir").Trim();
+            if (configured != "") return configured;
+        }
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Veylo");
+    }
+
+    static string EnsureSaveDirectory(string value)
+    {
+        if (!Regex.IsMatch(value, @"^[A-Za-z]:[\\/]") || value.Any(char.IsControl))
+            throw new InvalidOperationException(SaveDirectoryError);
+        try
+        {
+            string full = Path.GetFullPath(value);
+            string existing = full;
+            while (!Directory.Exists(existing))
+            {
+                if (File.Exists(existing)) throw new InvalidOperationException(SaveDirectoryError);
+                existing = Path.GetDirectoryName(existing);
+                if (string.IsNullOrEmpty(existing)) throw new InvalidOperationException(SaveDirectoryError);
+            }
+            LocalDirectory(existing);
+            Directory.CreateDirectory(full);
+            full = LocalDirectory(full);
+            string probe = Path.Combine(full, ".veylo-write-" + Guid.NewGuid().ToString("N"));
+            using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose)) { }
+            return full;
+        }
+        catch (IOException) { throw new InvalidOperationException(SaveDirectoryError); }
+        catch (UnauthorizedAccessException) { throw new InvalidOperationException(SaveDirectoryError); }
+        catch (ArgumentException) { throw new InvalidOperationException(SaveDirectoryError); }
+        catch (NotSupportedException) { throw new InvalidOperationException(SaveDirectoryError); }
+    }
     static void RequireAudioProbe(string media)
     {
         if (media == "audio-original" && !File.Exists(Path.Combine(AppDir ?? "", "bin", "ffmpeg", "ffprobe.exe")))
@@ -482,7 +538,7 @@ internal static class ShiguangBridge
         string[] known = { "", CanceledError, LiveCapError, "下载进程已停止，请重新提交任务。", "无法启动下载进程。", "下载超过两小时，已停止。",
             "视频不可访问或网络请求失败，请检查代理及 X 登录状态。", "视频不可访问或网络请求失败，请检查代理及 YouTube 登录状态。",
             "X 要求登录。请在 Tabbit 登录 X 后刷新独立的 X Cookie。", "YouTube 要求登录或验证。请确认浏览器中的 YouTube 登录状态后刷新 Cookie。",
-            "这条推文没有可下载的视频。", "本机下载进程失败，请检查下载目录、内核与代理设置。", MissingAudioProbe, AudioProbeError, AudioCopyError };
+            "这条推文没有可下载的视频。", "本机下载进程失败，请检查下载目录、内核与代理设置。", ConfigError, SaveDirectoryError, MissingAudioProbe, AudioProbeError, AudioCopyError };
         return known.Contains(error) ? error : "下载失败，请检查内容可访问性和保存目录。";
     }
     static string LocalDirectory(string path)
@@ -758,8 +814,10 @@ static object OpenJobFile(Dictionary<string, object> msg)
         ValidateFeatureOptions(msg, platform, out sponsorblock, out section, out normalizedSection, out playlist, out items, out live, out liveMaxMinutes);
         string part = EnumOption(msg, "part", "current", "current");
         RequireAudioProbe(media);
-        if (!File.Exists(Engine()) || !File.Exists(Path.Combine(AppDir, "bin", "ffmpeg", "ffmpeg.exe")))
+        if (!UsableApp(AppDir))
             throw new InvalidOperationException("找不到 FluentYTDL 内置 yt-dlp 或 FFmpeg，请检查便携版目录。");
+        var cfg = ReadFluentSettings();
+        Proxy(cfg);
         using (var mutex = new Mutex(false, "Local\\ShiguangBridgeAccept_" + User.Value))
         {
             if (!mutex.WaitOne(10000)) throw new InvalidOperationException("桥接繁忙，请稍后重试。");
@@ -768,15 +826,10 @@ static object OpenJobFile(Dictionary<string, object> msg)
                 string dir = Text(msg, "dir").Trim();
                 if (dir == "")
                 {
-                    var cfgDefault = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(AppDir, "config.json"), Encoding.UTF8));
-                    dir = Text(cfgDefault, "download_dir");
-                    if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathRooted(dir) || dir.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
-                        throw new InvalidOperationException("FluentYTDL 的保存目录无效，请先在软件设置中保存目录。");
+                    dir = Text(cfg, "download_dir").Trim();
+                    if (dir == "") dir = DefaultSaveDirectory();
                 }
-                else if (!Path.IsPathRooted(dir) || dir.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
-                    throw new InvalidOperationException("保存目录无效，请重新选择文件夹。");
-                dir = Path.GetFullPath(dir);
-                if (File.Exists(dir)) throw new InvalidOperationException("保存目录不是文件夹，请重新选择。");
+                dir = EnsureSaveDirectory(dir);
                 foreach (string file in Directory.GetFiles(Jobs, "*.json"))
                 {
                     Dictionary<string, object> old;
@@ -792,9 +845,6 @@ static object OpenJobFile(Dictionary<string, object> msg)
                         && (WorkerAlive(old) || Age(old) < 30))
                         return new { ok = true, jobId = Text(old, "id"), downloadDir = Text(old, "downloadDir"), cookieStatus = Text(old, "cookieStatus") };
                 }
-                var cfg = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(AppDir, "config.json"), Encoding.UTF8));
-                Proxy(cfg);
-                Directory.CreateDirectory(dir);
                 string id = Guid.NewGuid().ToString("N");
                 List<string> cookies = platform == "x"
                     ? XCookies(Path.Combine(AppDir, "bin", "cookies_twitter.txt"))
@@ -1054,6 +1104,12 @@ static object OpenJobFile(Dictionary<string, object> msg)
         if (Text(job, "limitRate", "off") != "off") args.AddRange(new[] { "--limit-rate", Text(job, "limitRate") });
         int fragments = TransferConcurrency(job, config);
         if (fragments > 1) args.AddRange(new[] { "--concurrent-fragments", fragments.ToString(CultureInfo.InvariantCulture) });
+        if (platform == "youtube" && !string.IsNullOrEmpty(AppDir))
+        {
+            string deno = Path.Combine(AppDir, "bin", "js", "deno.exe");
+            if (!File.Exists(deno)) deno = Path.Combine(AppDir, "bin", "deno", "deno.exe");
+            if (File.Exists(deno)) args.AddRange(new[] { "--js-runtimes", "deno:" + deno });
+        }
         args.Add("--paths"); args.Add("temp:" + Path.Combine(Jobs, Text(job, "id") + ".temp"));
         args.Add("--proxy"); args.Add(proxy);
         if (cookieFile != "") { args.Add("--cookies"); args.Add(cookieFile); }
@@ -1360,9 +1416,9 @@ static object OpenJobFile(Dictionary<string, object> msg)
             ValidateFeatureOptions(job, platform, out sponsorblock, out section, out normalizedSection, out playlist, out items, out live, out liveMinutes);
             RequireAudioProbe(media);
             if (File.Exists(CancelFile(id))) { FinalizeCanceled(job); return; }
-            var cfg = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(AppDir, "config.json"), Encoding.UTF8));
+            var cfg = ReadFluentSettings();
             string proxy = Proxy(cfg);
-            Directory.CreateDirectory(Text(job, "downloadDir"));
+            EnsureSaveDirectory(Text(job, "downloadDir"));
             Directory.CreateDirectory(temporary); ProtectDirectory(temporary);
             if (audioQuality != "auto" || media == "audio-original")
             {
@@ -1528,7 +1584,7 @@ static object OpenJobFile(Dictionary<string, object> msg)
         catch (Exception exception) {
 #endif
             job["state"] = "failed";
-            job["error"] = Text(job, "media") == "audio-original" && new[] { MissingAudioProbe, AudioProbeError, AudioCopyError }.Contains(exception.Message)
+            job["error"] = new[] { ConfigError, SaveDirectoryError, MissingAudioProbe, AudioProbeError, AudioCopyError }.Contains(exception.Message)
                 ? exception.Message : "本机下载进程失败，请检查下载目录、内核与代理设置。";
         }
         finally
