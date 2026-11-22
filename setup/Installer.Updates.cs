@@ -146,7 +146,13 @@ namespace VeyloSetup
             try { return ReleaseCatalog.Latest(download, repository, cancel); }
             catch (Exception error)
             {
-                if (!IsUpdateError(error) && !(error is OperationCanceledException)) throw;
+                if (!IsUpdateError(error)) throw;
+            }
+            if (cancel.IsCancellationRequested) return null;
+            try { return ReleaseCatalog.LatestFromTag(download, repository, cancel); }
+            catch (Exception error)
+            {
+                if (!IsUpdateError(error)) throw;
                 return null;
             }
         }
@@ -154,7 +160,8 @@ namespace VeyloSetup
         private static bool IsUpdateError(Exception error)
         {
             return error is IOException || error is HttpRequestException || error is InvalidOperationException ||
-                error is ArgumentException || error is System.ComponentModel.Win32Exception || error is UnauthorizedAccessException;
+                error is ArgumentException || error is System.ComponentModel.Win32Exception || error is UnauthorizedAccessException ||
+                error is OperationCanceledException;
         }
 
         public string[] UpdateComponents(Action<string, int> progress, CancellationToken cancel)
@@ -188,9 +195,10 @@ namespace VeyloSetup
             try
             {
                 var manifest = ReleaseCatalog.AssetFor(release, ReleaseCatalog.VeyloRepo, ReleaseCatalog.CatalogFile, "Veylo 兼容清单", 16 * 1024);
-                if (manifest == null) return null;
-                string path = download.Fetch(manifest, Files.MakeDirectory(Path.Combine(Root, "download-cache")), cancel);
-                var catalog = json.Deserialize<ReleaseCatalog.VerifiedComponents>(File.ReadAllText(path, Encoding.UTF8));
+                string contents = manifest == null
+                    ? download.ReadAssetText(release.AssetUrl(ReleaseCatalog.VeyloRepo, ReleaseCatalog.CatalogFile), 16 * 1024, cancel)
+                    : File.ReadAllText(download.Fetch(manifest, Files.MakeDirectory(Path.Combine(Root, "download-cache")), cancel), Encoding.UTF8);
+                var catalog = json.Deserialize<ReleaseCatalog.VerifiedComponents>(contents);
                 return catalog != null && catalog.Schema == 1 ? catalog : null;
             }
             catch (Exception error)
@@ -322,7 +330,7 @@ namespace VeyloSetup
                 current = RunTool(File.Exists(active) ? active : bundled, "--version", cancel);
                 if (upstream == null) return "yt-dlp " + current + " · 暂时无法查询官方版本。";
                 if (!ReleaseCatalog.Newer(upstream.Version, current)) return "yt-dlp " + current + " · 已是官方最新版。";
-                var candidate = ReleaseCatalog.AssetFor(upstream, ReleaseCatalog.EngineRepo, "yt-dlp.exe", "yt-dlp " + upstream.Version, 128 * 1024 * 1024);
+                var candidate = ReleaseCatalog.EngineAsset(upstream, download, cancel);
                 if (candidate == null) return "yt-dlp " + upstream.Version + " 缺少可校验的 Windows 安装文件，保留 " + current + "。";
                 string engine = download.Fetch(candidate, Files.MakeDirectory(Path.GetDirectoryName(EnginePath(candidate.Version))), cancel);
                 if (RunTool(engine, "--version", cancel) != candidate.Version ||

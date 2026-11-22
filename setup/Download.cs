@@ -49,23 +49,68 @@ namespace VeyloSetup
                 {
                     request.Headers.Accept.ParseAdd("application/vnd.github+json");
                     using (var response = http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).GetAwaiter().GetResult())
-                    {
-                        response.EnsureSuccessStatusCode();
-                        using (var input = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
-                        using (var output = new MemoryStream())
-                        using (deadline.Token.Register(input.Dispose))
-                        {
-                            var bytes = new byte[8192];
-                            int count;
-                            while ((count = input.ReadAsync(bytes, 0, bytes.Length, deadline.Token).GetAwaiter().GetResult()) > 0)
-                            {
-                                if (output.Length + count > 1024 * 1024) throw new IOException("GitHub 版本清单过大。");
-                                output.Write(bytes, 0, count);
-                            }
-                            return System.Text.Encoding.UTF8.GetString(output.ToArray());
-                        }
-                    }
+                        return ReadText(response, 1024 * 1024, deadline.Token);
                 }
+            }
+        }
+
+        public string LatestTag(string repository, CancellationToken cancel)
+        {
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel))
+            {
+                deadline.CancelAfter(TimeSpan.FromSeconds(12));
+                var page = new Uri("https://github.com/" + repository + "/releases/latest");
+                using (var response = http.GetAsync(page, HttpCompletionOption.ResponseHeadersRead, deadline.Token).GetAwaiter().GetResult())
+                {
+                    if (!Redirect(response) || response.Headers.Location == null)
+                        throw new IOException("无法从官方发布页取得版本。");
+                    var redirect = new Uri(page, response.Headers.Location);
+                    string prefix = "https://github.com/" + repository + "/releases/tag/";
+                    if (!redirect.AbsoluteUri.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || redirect.Query != "" || redirect.Fragment != "")
+                        throw new IOException("官方发布页返回了意外的版本地址。");
+                    return redirect.AbsoluteUri.Substring(prefix.Length);
+                }
+            }
+        }
+
+        public string ReadAssetText(string url, int limit, CancellationToken cancel)
+        {
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel))
+            {
+                deadline.CancelAfter(TimeSpan.FromSeconds(18));
+                using (var response = Open(new Uri(url), HttpMethod.Get, 0, deadline.Token))
+                    return ReadText(response, limit, deadline.Token);
+            }
+        }
+
+        public long AssetLength(string url, CancellationToken cancel)
+        {
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel))
+            {
+                deadline.CancelAfter(TimeSpan.FromSeconds(18));
+                using (var response = Open(new Uri(url), HttpMethod.Head, 0, deadline.Token))
+                {
+                    response.EnsureSuccessStatusCode();
+                    return response.Content.Headers.ContentLength ?? 0;
+                }
+            }
+        }
+
+        private static string ReadText(HttpResponseMessage response, int limit, CancellationToken cancel)
+        {
+            response.EnsureSuccessStatusCode();
+            using (var input = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
+            using (var output = new MemoryStream())
+            using (cancel.Register(input.Dispose))
+            {
+                var bytes = new byte[8192];
+                int count;
+                while ((count = input.ReadAsync(bytes, 0, bytes.Length, cancel).GetAwaiter().GetResult()) > 0)
+                {
+                    if (output.Length + count > limit) throw new IOException("GitHub 版本清单过大。");
+                    output.Write(bytes, 0, count);
+                }
+                return System.Text.Encoding.UTF8.GetString(output.ToArray());
             }
         }
 
@@ -117,18 +162,24 @@ namespace VeyloSetup
             throw new InvalidOperationException("下载未完成。");
         }
 
-        private HttpResponseMessage Open(Uri url, long offset, CancellationToken cancel)
+        private static bool Redirect(HttpResponseMessage response)
+        {
+            int status = (int)response.StatusCode;
+            return status >= 300 && status < 400;
+        }
+
+        private HttpResponseMessage Open(Uri url, HttpMethod method, long offset, CancellationToken cancel)
         {
             for (int redirects = 0; redirects <= 5; redirects++)
             {
                 if (url.Scheme != "https" || !url.IsDefaultPort || url.UserInfo.Length != 0 ||
                     !(url.Host == "github.com" || url.Host == "release-assets.githubusercontent.com" || url.Host == "objects.githubusercontent.com"))
                     throw new InvalidOperationException("官方发布资源重定向到未知地址，已停止下载。");
-                using (var request = new HttpRequestMessage(HttpMethod.Get, url))
+                using (var request = new HttpRequestMessage(method, url))
                 {
                     if (offset > 0) request.Headers.Range = new RangeHeaderValue(offset, null);
                     var response = http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel).GetAwaiter().GetResult();
-                    if ((int)response.StatusCode < 300 || (int)response.StatusCode >= 400) return response;
+                    if (!Redirect(response)) return response;
                     using (response)
                     {
                         if (response.Headers.Location == null) throw new HttpRequestException("Missing redirect location");
@@ -142,7 +193,7 @@ namespace VeyloSetup
         private void Receive(Dependency dependency, string partial, CancellationToken cancel)
         {
             long offset = File.Exists(partial) ? new FileInfo(partial).Length : 0;
-            using (var response = Open(new Uri(dependency.Url), offset, cancel))
+            using (var response = Open(new Uri(dependency.Url), HttpMethod.Get, offset, cancel))
             {
                 if (offset > 0 && response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
                 {

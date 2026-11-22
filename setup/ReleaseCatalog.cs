@@ -24,6 +24,11 @@ namespace VeyloSetup
             public Asset[] assets { get; set; }
 
             public string Version { get { return tag_name.TrimStart('v'); } }
+
+            internal string AssetUrl(string repository, string file)
+            {
+                return "https://github.com/" + repository + "/releases/download/" + tag_name + "/" + file;
+            }
         }
 
         internal sealed class Asset
@@ -46,13 +51,41 @@ namespace VeyloSetup
 
         internal static Release Latest(Download download, string repository, CancellationToken cancel)
         {
-            var release = new JavaScriptSerializer().Deserialize<Release>(download.ReadRelease(repository, cancel));
+            return ValidateRelease(new JavaScriptSerializer().Deserialize<Release>(download.ReadRelease(repository, cancel)), repository);
+        }
+
+        internal static Release LatestFromTag(Download download, string repository, CancellationToken cancel)
+        {
+            return ValidateRelease(new Release { tag_name = download.LatestTag(repository, cancel) }, repository);
+        }
+
+        private static Release ValidateRelease(Release release, string repository)
+        {
             string expression = repository == EngineRepo ? @"^[0-9]{4}\.[0-9]{2}\.[0-9]{2}$" : @"^v\d{1,4}\.\d{1,4}\.\d{1,4}$";
             if (release == null || release.draft || release.prerelease ||
                 !Regex.IsMatch(release.tag_name ?? "", expression, RegexOptions.CultureInvariant) ||
                 (repository == EngineRepo && !EngineVersion(release.Version)))
                 throw new IOException("官方发布版本的格式无法识别。");
             return release;
+        }
+
+        internal static Dependency EngineAsset(Release release, Download download, CancellationToken cancel)
+        {
+            const long limit = 128 * 1024 * 1024;
+            const string file = "yt-dlp.exe";
+            string name = "yt-dlp " + release.Version;
+            var api = AssetFor(release, EngineRepo, file, name, limit);
+            if (api != null) return api;
+            string sums = download.ReadAssetText(release.AssetUrl(EngineRepo, "SHA2-256SUMS"), 16 * 1024, cancel);
+            var lines = Regex.Matches(sums, @"(?m)^([a-f0-9]{64})[ \t]+\*?yt-dlp\.exe[ \t]*\r?$");
+            if (lines.Count != 1) return null;
+            string url = release.AssetUrl(EngineRepo, file);
+            var fallback = new Dependency
+            {
+                Name = name, Version = release.Version, Filename = file, Url = url,
+                Sha256 = lines[0].Groups[1].Value, Size = download.AssetLength(url, cancel)
+            };
+            return ValidAsset(fallback, EngineRepo, release.tag_name, file, limit) ? fallback : null;
         }
 
         internal static Dependency AssetFor(Release release, string repository, string filename, string name, long maxSize)
