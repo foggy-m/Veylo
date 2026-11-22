@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { execFile } = require('node:child_process');
 const { chromium } = require(process.env.VEYLO_PLAYWRIGHT);
 
 const app = path.join(process.env.LOCALAPPDATA, 'Veylo', 'app-2.4.5');
@@ -65,6 +66,24 @@ async function serviceAccess(test) {
   }
 }
 
+function diagnoseYouTube(url) {
+  const bin = path.join(process.env.LOCALAPPDATA, 'Veylo', 'vendor', 'FluentYTDL-3.7.6', 'bin');
+  const deno = [path.join(bin, 'js', 'deno.exe'), path.join(bin, 'deno', 'deno.exe')].find(file => fs.existsSync(file));
+  if (!deno) return Promise.resolve('runtime-missing');
+  const engine = path.join(bin, 'yt-dlp', 'yt-dlp.exe');
+  return new Promise(resolve => {
+    execFile(engine, ['--ignore-config', '--no-cache-dir', '--no-playlist', '--simulate', '--proxy', '',
+      '--socket-timeout', '9', '--extractor-retries', '0', '--js-runtimes', `deno:${deno}`, '--', url],
+    { timeout: 25000, windowsHide: true }, (error, _stdout, stderr) => {
+      if (!error) return resolve('metadata-accessible');
+      const statuses = [[/sign in|confirm you.re not a bot|login required/i, 'sign-in-or-bot-check'],
+        [/HTTP Error 429/i, 'http-429'], [/HTTP Error 403/i, 'http-403'],
+        [/HTTP Error 5\d\d/i, 'http-5xx'], [/no video formats|requested format is not available/i, 'formats-unavailable']];
+      return resolve(statuses.find(([pattern]) => pattern.test(stderr))?.[1] ?? (error.killed ? 'timeout' : 'extraction-failed'));
+    });
+  });
+}
+
 async function main() {
   const context = await chromium.launchPersistentContext(profile, {
     channel: 'chromium', headless: true, viewport: { width: 550, height: 760 },
@@ -85,7 +104,9 @@ async function main() {
     console.log('PASS actual Chromium extension and both registered native bridges');
     const live = await Promise.all(tests.map(test => smokeDownload(page, test)));
     await Promise.all(live.map(async (result, index) => {
-      if (result.liveDownload !== 'completed') result.serviceAccess = await serviceAccess(tests[index]);
+      if (result.liveDownload === 'completed') return;
+      result.serviceAccess = await serviceAccess(tests[index]);
+      if (result.platform === 'youtube') result.serviceAccess.engineProbe = await diagnoseYouTube(tests[index].url);
     }));
     const reportPath = 'dist/clean-install-report.json';
     const report = { ...JSON.parse(fs.readFileSync(reportPath)), actualChromiumNativeMessaging: bridges, liveGuestTasks: live };

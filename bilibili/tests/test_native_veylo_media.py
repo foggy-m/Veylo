@@ -129,7 +129,9 @@ internal static class OfflinePython {
         string root = Option(args, "--bili-root"), url = Option(args, "--url");
         File.WriteAllText(Path.Combine(root, "invocation.json"), json.Serialize(args));
         if (url.EndsWith("av9990")) return CancelScenario(args, json, root);
-        Thread.Sleep(600);
+        string gate = Environment.GetEnvironmentVariable("BILI_TEST_DEDUPE_GATE");
+        if (gate == null) Thread.Sleep(600);
+        else if (!SpinWait.SpinUntil(() => File.Exists(gate), TimeSpan.FromSeconds(35))) return 3;
         string jobFile = Path.Combine(Option(args, "--jobs-dir"), Option(args, "--job-id") + ".json");
         var job = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(jobFile));
         string media = Option(args, "--media");
@@ -341,10 +343,17 @@ def native_tests(fixture, release_output):
             if audio_quality is not None:
                 msg["audioQuality"] = audio_quality
             normalized = (audio_quality or "auto") if media in ("audio-mp3", "audio-m4a") else "auto"
-            accepted = call(exe, msg, env)
-            duplicate = call(exe, msg, env)
-            check(duplicate.get("jobId") == accepted.get("jobId"), "Bili identical job dedupe")
+            gate = fixture / ("finish-dedup-" + uuid.uuid4().hex)
+            dedupe_env = dict(env, BILI_TEST_DEDUPE_GATE=str(gate))
+            accepted = call(exe, msg, dedupe_env)
+            try:
+                duplicate = call(exe, msg, dedupe_env)
+            finally:
+                gate.touch()
             state = wait(exe, accepted, env)
+            if duplicate.get("ok") and duplicate.get("jobId") != accepted["jobId"]:
+                wait(exe, duplicate, env)
+            check(duplicate.get("jobId") == accepted["jobId"], "Bili identical pending job dedupe")
             check(state["state"] == "completed" and state["media"] == (media or "video"), "Bili media completion")
             check(state.get("audioQuality") == normalized, "Bili status has normalized audioQuality")
             check(state["title"] == "Bili 合成标题完成" and len(state["files"]) == 1, "driver title/files survive C# final write")
