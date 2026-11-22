@@ -425,11 +425,13 @@ def native_tests(fixture, release_output):
         check(set(jobs.iterdir()) == before, "dedup does not start another bitrate worker")
         for audio_id in ids.values():
             (jobs / (audio_id + ".json")).unlink()
-    distinct = [call(exe, {**base, **opts}, env) for opts in ({"media": "audio-mp3"}, {"subLangs": "en"}, {"metadata": True},
-                {"quality": "80"}, {"part": "all"}, {"dir": str(alternate)}, {"danmaku": "xml"}, {"danmaku": "ass"},
-                {"biliSubtitles": "srt"}, {"part": "collection"})]
-    check(all(a.get("jobId") != job_id for a in distinct), "Bili dedupe includes media/langs/metadata/quality/part/dir")
-    for accepted in distinct:
+    variants = ({"media": "audio-mp3"}, {"subLangs": "en"}, {"metadata": True}, {"quality": "80"},
+                {"part": "all"}, {"dir": str(alternate)}, {"danmaku": "xml"}, {"danmaku": "ass"},
+                {"biliSubtitles": "srt"}, {"part": "collection"})
+    # Each variant differs from the seeded active job. Drain it before launching the next worker.
+    for variant in variants:
+        accepted = call(exe, {**base, **variant}, env)
+        check(accepted.get("jobId") != job_id, "Bili dedupe distinguishes " + str(variant))
         check(wait(exe, accepted, env)["state"] == "completed", "distinct Bili option job completes")
     seeded.update(state="completed", files=[], error="synthetic-private-value", proxy="synthetic-private-value")
     files = []
@@ -581,8 +583,9 @@ def native_feature_tests(fixture, exe, release, env, native, app, downloads, cfg
           and state["fileCount"] == 1, "job-status returns extras options")
     record = json.loads((jobs / (accepted["jobId"] + ".json")).read_text(encoding="utf-8"))
     check(record["danmaku"] == "ass" and record["biliSubtitles"] == "srt" and record["part"] == "collection", "extras options persisted")
-    check(call(exe, {**base, "danmaku": "ass", "biliSubtitles": "srt", "part": "collection", "dir": str(extras_dir)}, env)["jobId"]
-          != accepted["jobId"], "completed job is not reused")
+    repeated = call(exe, {**base, "danmaku": "ass", "biliSubtitles": "srt", "part": "collection", "dir": str(extras_dir)}, env)
+    check(repeated.get("jobId") != accepted["jobId"], "completed job is not reused")
+    check(wait(exe, repeated, env)["state"] == "completed", "repeated request completes")
 
     # job-status sanitizes warnings, fileCount and stored extras.
     sid = uuid.uuid4().hex
@@ -839,8 +842,8 @@ def native_worker_timeout_test(fixture, source, env, app):
 def driver_feature_tests(driver, module_map, fixture, bili_root, media_root, source_audio):
     from test_driver_veylo_features import run_suite
     result = run_suite()
-    check(result.wasSuccessful() and result.testsRun == 40 and not result.skipped,
-          "all 40 offline driver feature cases must pass without skips")
+    check(result.wasSuccessful() and result.testsRun == 41 and not result.skipped,
+          "all 41 offline driver feature cases must pass without skips")
     print("DRIVER_FEATURE_SUITE tests=%d failures=%d errors=%d skipped=%d" %
           (result.testsRun, len(result.failures), len(result.errors), len(result.skipped)))
 

@@ -95,7 +95,9 @@ def run_test(test, seconds, work):
             if process.thread:K.CloseHandle(process.thread)
             K.CloseHandle(process.process)
         K.CloseHandle(job)
-    if log.exists():print(log.read_text(encoding="utf-8")[-1800:],flush=True)
+    if log.exists():
+        log_limit = 12000 if code.value else 1800
+        print(log.read_text(encoding="utf-8")[-log_limit:], flush=True)
     return 0 if code.value==0 else 1
 
 def main():

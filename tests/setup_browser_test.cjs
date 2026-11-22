@@ -10,7 +10,8 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'veylo-clean-chromium-'));
 const extensionId = 'ikaahmfclfkamdgikchmjnoalpklkddk';
 const tests = [
   { platform: 'youtube', url: 'https://www.youtube.com/watch?v=DTi8wZ1a1TA', quality: '480' },
-  { platform: 'x', url: 'https://x.com/NASA/status/623160978427936768', quality: '480' },
+  // NASA's DART spacecraft footage is hosted directly on X.
+  { platform: 'x', url: 'https://x.com/NASA/status/1574539270987173903', quality: '480' },
   // The Daily Dweebs, a one-minute Blender open movie in this anthology.
   { platform: 'bili', url: 'https://www.bilibili.com/video/BV1iW4113786/?p=4', quality: '32' },
 ];
