@@ -46,6 +46,24 @@ async function smokeDownload(page, test) {
   }
 }
 
+async function serviceAccess(test) {
+  const url = test.platform === 'bili' ? 'https://api.bilibili.com/x/web-interface/view?bvid=BV1iW4113786' : test.url;
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const result = { httpStatus: response.status };
+    if (test.platform === 'bili' && response.ok) {
+      const value = await response.json();
+      if (Number.isSafeInteger(value?.code)) result.platformCode = value.code;
+    } else {
+      await response.body?.cancel();
+    }
+    return result;
+  } catch (error) {
+    const code = error?.cause?.code ?? error.name;
+    return { networkError: typeof code === 'string' && /^[\w-]{1,60}$/.test(code) ? code : 'request_failed' };
+  }
+}
+
 async function main() {
   const context = await chromium.launchPersistentContext(profile, {
     channel: 'chromium', headless: true, viewport: { width: 550, height: 760 },
@@ -65,6 +83,9 @@ async function main() {
     await page.screenshot({ path: 'dist/clean-browser-popup.png' });
     console.log('PASS actual Chromium extension and both registered native bridges');
     const live = await Promise.all(tests.map(test => smokeDownload(page, test)));
+    await Promise.all(live.map(async (result, index) => {
+      if (result.liveDownload !== 'completed') result.serviceAccess = await serviceAccess(tests[index]);
+    }));
     const reportPath = 'dist/clean-install-report.json';
     const report = { ...JSON.parse(fs.readFileSync(reportPath)), actualChromiumNativeMessaging: bridges, liveGuestTasks: live };
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');

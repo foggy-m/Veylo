@@ -1298,10 +1298,14 @@ def main():
         check(distinct.get("jobId") != seeded_id and wait(exe, distinct, env)[0]["state"] == "completed", "original identity stays distinct from forced MP3 auto")
         seeded.pop("media")
         job_path.write_text(json.dumps(seeded), encoding="utf-8")
-        different = [accept(media="audio-mp3"), accept(subtitles="manual"), accept(subLangs="en"),
-                     accept(metadata=True), accept(quality="480"), accept(dir=str(other_dir))]
-        check(all(j.get("jobId") != seeded_id for j in different), "dedupe media/subtitles/languages/metadata/quality/directory")
-        for j in different:
+        # These cases check which options participate in deduplication. A burst of
+        # six independent workers and their engines exceeds the test job's process cap.
+        # Concurrent submissions are covered separately with bounded fan-out.
+        for options in ({"media": "audio-mp3"}, {"subtitles": "manual"}, {"subLangs": "en"},
+                        {"metadata": True}, {"quality": "480"}, {"dir": str(other_dir)}):
+            j = accept(**options)
+            check(j.get("ok") is True and j.get("jobId") != seeded_id,
+                  "dedupe variant accepted as a distinct job: " + next(iter(options)) + " " + str(j.get("error", "")))
             check(wait(exe, j, env)[0]["state"] == "completed", "distinct option worker completes")
         seeded["state"] = "completed"
         seeded["error"] = "synthetic-private-value proxy credential"
