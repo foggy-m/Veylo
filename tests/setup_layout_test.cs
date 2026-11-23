@@ -15,14 +15,14 @@ internal static class SetupLayoutTest
     private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
 
     [STAThread]
-    private static void Main(string[] args)
+    private static int Main(string[] args)
     {
         if (args.Length == 3 && args[0] == "--browser-launch")
         {
             string temporary = args[1] + ".tmp";
             File.WriteAllText(temporary, args[2]);
             File.Move(temporary, args[1]);
-            return;
+            return 0;
         }
         if (args.Contains("--96"))
         {
@@ -30,97 +30,114 @@ internal static class SetupLayoutTest
             Require(SetThreadDpiAwarenessContext(new IntPtr(-1)) != IntPtr.Zero, "Could not set the test thread to 96 DPI");
         }
 
+        Control.CheckForIllegalCrossThreadCalls = true;
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Type setup = Assembly.LoadFrom(Path.GetFullPath(args[0])).GetType("VeyloSetup.SetupForm", true);
         using (var form = (Form)Activator.CreateInstance(setup))
         {
-            // Exercise WinForms layout without opening the installer on the user's desktop.
+            // Use the same message loop as Setup so asynchronous updates return to the UI thread.
             form.Opacity = 0;
             form.ShowInTaskbar = false;
-            form.Show();
-
-            var title = Field<Label>(form, "title");
-            var description = Field<Label>(form, "description");
-            var status = Field<Label>(form, "status");
-            var progress = Field<ProgressBar>(form, "progress");
-            var cancel = Field<Button>(form, "secondary");
-            var primary = Field<Button>(form, "primary");
-            var destination = Field<TextBox>(form, "destination");
-            var location = Field<TableLayoutPanel>(form, "location");
-            CheckText(title);
-            CheckText(description);
-            CheckInClient(form, destination);
-            CheckTextIn(form, location.Controls.OfType<Button>().Single());
-            CheckTextIn(form, primary);
-            Require(Path.IsPathRooted(destination.Text) && !progress.Visible, "Setup must offer a path before installing");
-
-            string originalLocation = destination.Text;
-            destination.Text = "D:relative-install-location";
-            primary.PerformClick();
-            Require(destination.Visible && !progress.Visible && status.Visible && primary.Text == "重试",
-                    "An invalid destination must leave the chooser available");
-            destination.Text = originalLocation;
-            setup.GetMethod("ShowInstalling", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(form, null);
-            Require(!destination.Visible && progress.Visible, "Install progress must replace the chooser");
-            status.Text = "下载 FluentYTDL 3.7.6 full (Windows x64)  132/182 MB";
-            CheckText(title);
-            CheckText(description);
-            CheckText(status);
-            CheckTextIn(form, cancel);
-            CheckInClient(form, progress);
-
-            int oneLineHeight = status.Height;
-            float scale = form.CurrentAutoScaleDimensions.Width / 96;
-            form.ClientSize = new Size((int)(350 * scale), (int)(245 * scale));
-            CheckText(title);
-            CheckText(description);
-            CheckText(status);
-            Require(status.Height > oneLineHeight, "Download status must wrap on a narrow window");
-            var body = (ScrollableControl)status.Parent.Parent;
-            Require(body.VerticalScroll.Visible && !body.HorizontalScroll.Visible,
-                    "A compact window must allow scrolling through the text");
-            CheckTextIn(form, cancel);
-            CheckInClient(form, progress);
-
-            setup.GetMethod("ShowFinished", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(form, null);
-            bool installedActions = args.Contains("--installed-actions");
-            var installRoot = installedActions ? Environment.GetEnvironmentVariable("VEYLO_TEST_INSTALL_DIR")
-                : Path.Combine(Path.GetTempPath(), "Veylo layout fixture");
-            Require(!installedActions || (!string.IsNullOrEmpty(installRoot) && Directory.Exists(installRoot)),
-                    "The installed actions test needs the disposable Windows installation");
-            var installer = setup.Assembly.GetType("VeyloSetup.Installer", true);
-            setup.GetField("installer", Private).SetValue(form, Activator.CreateInstance(installer, installRoot));
-            status.Text = "FluentYTDL 3.7.6 · 官方 3.7.7 等待 Veylo 兼容验证。\r\n"
-                        + "Bili23 2.14.0 · 官方 2.21.0 等待 Veylo 兼容验证。\r\n"
-                        + "yt-dlp 2026.11.20 · 已更新至官方版本。";
-            CheckText(title);
-            CheckText(description);
-            CheckText(status);
-            var accounts = Field<LinkLabel>(form, "accounts");
-            var updates = Field<LinkLabel>(form, "updates");
-            CheckTextIn(form, accounts);
-            CheckTextIn(form, updates);
-            Require(!accounts.Bounds.IntersectsWith(updates.Bounds), "Setup links must fit beside or below each other");
-            var browsers = Field<ComboBox>(form, "browsers");
-            if (browsers.Visible) CheckInClient(form, browsers);
-            CheckTextIn(form, primary);
-            CheckTextIn(form, cancel);
-            CheckMenu(form, accounts, "accountMenu", 2);
-            CheckMenu(form, updates, "updateMenu", 3);
-            if (installedActions) CheckInstalledActions(form, installRoot);
-            else
+            Exception failure = null;
+            form.Shown += (sender, e) =>
             {
-                for (int option = 0; option < 2; option++)
-                {
-                    ClickMenuItem(form, accounts, "accountMenu", option);
-                    Require(status.Text.StartsWith("未能打开") && primary.Enabled && cancel.Enabled,
-                            "A missing account app must leave the Setup actions available");
-                }
+                try { CheckWindow(form, args.Contains("--installed-actions")); }
+                catch (Exception error) { failure = error; }
+                finally { form.Close(); }
+            };
+            Application.Run(form);
+            if (failure != null)
+            {
+                Console.Error.WriteLine(failure);
+                return 1;
             }
-            Console.WriteLine("PASS Setup layout, menus and post-install controls at {0} DPI",
-                              form.CurrentAutoScaleDimensions.Width);
         }
+        return 0;
+    }
+
+    private static void CheckWindow(Form form, bool installedActions)
+    {
+        Type setup = form.GetType();
+        var title = Field<Label>(form, "title");
+        var description = Field<Label>(form, "description");
+        var status = Field<Label>(form, "status");
+        var progress = Field<ProgressBar>(form, "progress");
+        var cancel = Field<Button>(form, "secondary");
+        var primary = Field<Button>(form, "primary");
+        var destination = Field<TextBox>(form, "destination");
+        var location = Field<TableLayoutPanel>(form, "location");
+        CheckText(title);
+        CheckText(description);
+        CheckInClient(form, destination);
+        CheckTextIn(form, location.Controls.OfType<Button>().Single());
+        CheckTextIn(form, primary);
+        Require(Path.IsPathRooted(destination.Text) && !progress.Visible, "Setup must offer a path before installing");
+
+        string originalLocation = destination.Text;
+        destination.Text = "D:relative-install-location";
+        primary.PerformClick();
+        Require(destination.Visible && !progress.Visible && status.Visible && primary.Text == "重试",
+                "An invalid destination must leave the chooser available");
+        destination.Text = originalLocation;
+        setup.GetMethod("ShowInstalling", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(form, null);
+        Require(!destination.Visible && progress.Visible, "Install progress must replace the chooser");
+        status.Text = "下载 FluentYTDL 3.7.6 full (Windows x64)  132/182 MB";
+        CheckText(title);
+        CheckText(description);
+        CheckText(status);
+        CheckTextIn(form, cancel);
+        CheckInClient(form, progress);
+
+        int oneLineHeight = status.Height;
+        float scale = form.CurrentAutoScaleDimensions.Width / 96;
+        form.ClientSize = new Size((int)(350 * scale), (int)(245 * scale));
+        CheckText(title);
+        CheckText(description);
+        CheckText(status);
+        Require(status.Height > oneLineHeight, "Download status must wrap on a narrow window");
+        var body = (ScrollableControl)status.Parent.Parent;
+        Require(body.VerticalScroll.Visible && !body.HorizontalScroll.Visible,
+                "A compact window must allow scrolling through the text");
+        CheckTextIn(form, cancel);
+        CheckInClient(form, progress);
+
+        setup.GetMethod("ShowFinished", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(form, null);
+        var installRoot = installedActions ? Environment.GetEnvironmentVariable("VEYLO_TEST_INSTALL_DIR")
+            : Path.Combine(Path.GetTempPath(), "Veylo layout fixture");
+        Require(!installedActions || (!string.IsNullOrEmpty(installRoot) && Directory.Exists(installRoot)),
+                "The installed actions test needs the disposable Windows installation");
+        var installer = setup.Assembly.GetType("VeyloSetup.Installer", true);
+        setup.GetField("installer", Private).SetValue(form, Activator.CreateInstance(installer, installRoot));
+        status.Text = "FluentYTDL 3.7.6 · 官方 3.7.7 等待 Veylo 兼容验证。\n"
+                    + "Bili23 2.14.0 · 官方 2.21.0 等待 Veylo 兼容验证。\n"
+                    + "yt-dlp 2026.11.20 · 已更新至官方版本。";
+        CheckText(title);
+        CheckText(description);
+        CheckText(status);
+        var accounts = Field<LinkLabel>(form, "accounts");
+        var updates = Field<LinkLabel>(form, "updates");
+        CheckTextIn(form, accounts);
+        CheckTextIn(form, updates);
+        Require(!accounts.Bounds.IntersectsWith(updates.Bounds), "Setup links must fit beside or below each other");
+        var browsers = Field<ComboBox>(form, "browsers");
+        if (browsers.Visible) CheckInClient(form, browsers);
+        CheckTextIn(form, primary);
+        CheckTextIn(form, cancel);
+        CheckMenu(form, accounts, "accountMenu", 2);
+        CheckMenu(form, updates, "updateMenu", 3);
+        if (installedActions) CheckInstalledActions(form, installRoot);
+        else
+        {
+            for (int option = 0; option < 2; option++)
+            {
+                ClickMenuItem(form, accounts, "accountMenu", option);
+                Require(status.Text.StartsWith("未能打开") && primary.Enabled && cancel.Enabled,
+                        "A missing account app must leave the Setup actions available");
+            }
+        }
+        Console.WriteLine("PASS Setup layout, menus and post-install controls at {0} DPI",
+                          form.CurrentAutoScaleDimensions.Width);
     }
 
     private static void CheckMenu(Form form, LinkLabel link, string field, int count)
@@ -172,7 +189,7 @@ internal static class SetupLayoutTest
 
         ClickMenuItem(form, updates, "updateMenu", 0);
         WaitUntil(() => !progress.Visible, TimeSpan.FromMinutes(4));
-        Require(status.Text.Contains("Bili23") && updates.Enabled, "Update results must leave the menu usable");
+        Require(status.Text.Contains("Bili23") && updates.Enabled, "Update results must leave the menu usable. Status: " + status.Text);
         CheckTextIn(form, updates);
         CheckTextIn(form, Field<LinkLabel>(form, "accounts"));
 
