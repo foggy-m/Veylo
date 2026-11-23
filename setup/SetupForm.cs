@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -31,8 +32,12 @@ namespace VeyloSetup
         private readonly TextBox destination;
         private readonly ProgressBar progress;
         private readonly Button primary, secondary;
+        private readonly FlowLayoutPanel tools;
         private readonly ComboBox browsers;
         private readonly LinkLabel accounts, updates;
+        private readonly IContainer menuComponents = new Container();
+        private readonly ContextMenuStrip accountMenu, updateMenu;
+        private readonly ToolStripMenuItem trackUpdates;
         private CancellationTokenSource install;
         private bool finished;
 
@@ -57,10 +62,11 @@ namespace VeyloSetup
             BackColor = Paper;
             Font = new Font("Microsoft YaHei UI", 10F);
 
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             Controls.Add(layout);
@@ -126,36 +132,53 @@ namespace VeyloSetup
             };
             layout.Controls.Add(progress, 0, 2);
 
-            var tools = new FlowLayoutPanel
+            tools = new FlowLayoutPanel
             {
-                Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty
+                Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = Padding.Empty, Padding = new Padding(28, 5, 28, 2), Visible = false
             };
             browsers = new ComboBox
             {
-                Width = 154, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 0, 22, 6),
+                Width = 116, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 0, 12, 6),
                 AccessibleName = "选择浏览器", Visible = false
             };
             tools.Controls.Add(browsers);
             accounts = new LinkLabel
             {
-                Text = "打开下载器登录", LinkColor = Teal, AutoSize = true, Margin = new Padding(0, 4, 22, 6), Visible = false
+                Text = "打开下载器登录", LinkColor = Teal, AutoSize = true, Margin = new Padding(0, 4, 12, 6), Visible = false
             };
-            accounts.LinkClicked += (sender, e) => ShowAccounts();
             tools.Controls.Add(accounts);
             updates = new LinkLabel
             {
                 Text = "组件更新", LinkColor = Teal, AutoSize = true, Margin = new Padding(0, 4, 0, 6), Visible = false
             };
-            updates.LinkClicked += (sender, e) => ShowUpdateMenu();
             tools.Controls.Add(updates);
-            content.Controls.Add(tools);
+            // Update messages can scroll independently of the controls that open the menus.
+            layout.Controls.Add(tools, 0, 3);
+
+            accountMenu = new ContextMenuStrip(menuComponents);
+            accountMenu.Items.Add("登录 YouTube / X", null, (sender, e) => OpenAccountApp(false));
+            accountMenu.Items.Add("登录哔哩哔哩", null, (sender, e) => OpenAccountApp(true));
+            accounts.LinkClicked += (sender, e) => accountMenu.Show(accounts, new Point(0, accounts.Height));
+
+            updateMenu = new ContextMenuStrip(menuComponents);
+            updateMenu.Items.Add("检查并更新兼容组件", null, (sender, e) => UpdateDownloads());
+            trackUpdates = new ToolStripMenuItem("打开管理器时自动更新") { CheckOnClick = true };
+            trackUpdates.Click += (sender, e) => SetAutomaticUpdates();
+            updateMenu.Items.Add(trackUpdates);
+            updateMenu.Items.Add("恢复随包 yt-dlp", null, (sender, e) =>
+            {
+                try { installer.RestoreBundledEngine(); ShowStatus("已恢复随包 yt-dlp，并关闭管理器自动更新。"); }
+                catch (Exception error) { ShowStatus(UserMessage(error), true); }
+            });
+            updates.LinkClicked += (sender, e) => ShowUpdateMenu();
 
             var actions = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 FlowDirection = FlowDirection.RightToLeft, Margin = Padding.Empty, Padding = new Padding(28, 7, 28, 18)
             };
-            layout.Controls.Add(actions, 0, 3);
+            layout.Controls.Add(actions, 0, 4);
             primary = CreateButton("安装", 138);
             primary.BackColor = Teal;
             primary.ForeColor = Color.White;
@@ -180,6 +203,12 @@ namespace VeyloSetup
             base.OnLoad(e);
             Rectangle workArea = Screen.FromControl(this).WorkingArea;
             Size = new Size(Math.Min(Width, workArea.Width), Math.Min(Height, workArea.Height));
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) menuComponents.Dispose();
+            base.Dispose(disposing);
         }
 
         private static Label CreateLabel(string text, int bottomMargin)
@@ -271,7 +300,7 @@ namespace VeyloSetup
         private void CancelInstall()
         {
             secondary.Enabled = false;
-            status.Text = "正在停止安装…";
+            ShowStatus(finished ? "正在停止检查更新…" : "正在停止安装…");
             install.Cancel();
         }
 
@@ -286,16 +315,17 @@ namespace VeyloSetup
         private void ShowFinished()
         {
             finished = true;
-            title.Text = "安装完成，加载浏览器扩展";
-            description.Text = "打开扩展管理页，开启「开发者模式」，选择「加载已解压的扩展程序」。";
-            status.Text = "安装器会复制扩展目录。在浏览器的文件夹窗口里粘贴路径并确认。";
+            ShowBrowserInstructions();
+            ShowStatus("安装器会复制扩展目录。在浏览器的文件夹窗口里粘贴路径并确认。");
             progress.Visible = false;
             browsers.Items.AddRange(InstalledBrowsers().Cast<object>().ToArray());
-            browsers.Visible = browsers.Items.Count > 0;
-            if (browsers.Visible) browsers.SelectedIndex = 0;
+            bool hasBrowser = browsers.Items.Count > 0;
+            browsers.Visible = hasBrowser;
+            if (hasBrowser) browsers.SelectedIndex = 0;
             accounts.Visible = true;
             updates.Visible = true;
-            primary.Text = browsers.Visible ? "打开扩展管理页" : "打开扩展文件夹";
+            tools.Visible = true;
+            primary.Text = hasBrowser ? "打开扩展管理页" : "打开扩展文件夹";
             primary.Visible = true;
             secondary.Text = "复制路径";
             secondary.Enabled = true;
@@ -304,61 +334,74 @@ namespace VeyloSetup
             primary.Focus();
         }
 
-        private void ShowAccounts()
+        private void ShowBrowserInstructions()
         {
-            var menu = new ContextMenuStrip();
-            menu.Items.Add("登录 YouTube / X", null, (sender, e) => OpenAccountApp(false));
-            menu.Items.Add("登录哔哩哔哩", null, (sender, e) => OpenAccountApp(true));
-            menu.Closed += (sender, e) => menu.Dispose();
-            menu.Show(accounts, new Point(0, accounts.Height));
+            title.Text = "安装完成，加载浏览器扩展";
+            description.Text = "打开扩展管理页，开启「开发者模式」，选择「加载已解压的扩展程序」。";
+            description.Visible = true;
+        }
+
+        private void ShowStatus(string message, bool error = false)
+        {
+            status.ForeColor = error ? Error : Ink;
+            status.Text = message;
         }
 
         private void OpenAccountApp(bool bili)
         {
-            try { installer.OpenVendor(bili); }
-            catch (Exception error) { status.Text = UserMessage(error); }
+            ShowBrowserInstructions();
+            string vendor = bili ? "哔哩哔哩下载器" : "YouTube / X 下载器";
+            try
+            {
+                installer.OpenVendor(bili);
+                ShowStatus("已打开" + vendor + "。请在下载器中登录。");
+            }
+            catch (Exception) { ShowStatus("未能打开" + vendor + "。请重新运行安装器检查下载组件。", true); }
         }
 
         private void ShowUpdateMenu()
         {
-            var menu = new ContextMenuStrip();
-            menu.Items.Add("检查并更新兼容组件", null, (sender, e) => UpdateDownloads());
-            var track = new ToolStripMenuItem("打开管理器时自动更新") { CheckOnClick = true };
-            try { track.Checked = installer.TrackUpdates; }
-            catch (Exception error) { status.Text = UserMessage(error); }
-            track.CheckedChanged += (sender, e) =>
+            try
             {
-                try
-                {
-                    installer.TrackUpdates = track.Checked;
-                    status.Text = track.Checked ? "每次打开管理器会自动检查并安装兼容的组件更新。" : "可随时从「组件更新」检查新版。";
-                    if (track.Checked) UpdateDownloads();
-                }
-                catch (Exception error) { status.Text = UserMessage(error); }
-            };
-            menu.Items.Add(track);
-            menu.Items.Add("恢复随包 yt-dlp", null, (sender, e) =>
+                trackUpdates.Checked = installer.TrackUpdates;
+                trackUpdates.Enabled = true;
+            }
+            catch (Exception error)
             {
-                try { installer.RestoreBundledEngine(); status.Text = "已恢复随包 yt-dlp，并关闭管理器自动更新。"; }
-                catch (Exception error) { status.Text = UserMessage(error); }
-            });
-            menu.Closed += (sender, e) => menu.Dispose();
-            menu.Show(updates, new Point(0, updates.Height));
+                trackUpdates.Enabled = false;
+                ShowStatus(UserMessage(error), true);
+            }
+            updateMenu.Show(updates, new Point(0, updates.Height));
+        }
+
+        private void SetAutomaticUpdates()
+        {
+            try
+            {
+                installer.TrackUpdates = trackUpdates.Checked;
+                if (trackUpdates.Checked) UpdateDownloads();
+                else ShowStatus("已关闭自动更新。可以随时检查新版。");
+            }
+            catch (Exception error) { ShowStatus(UserMessage(error), true); }
+        }
+
+        private void SetCheckingComponents(bool checking)
+        {
+            progress.Visible = checking;
+            primary.Enabled = tools.Enabled = !checking;
+            secondary.Enabled = true;
+            secondary.Text = checking ? "取消" : "复制路径";
         }
 
         private async void UpdateDownloads()
         {
             if (install != null) return;
             title.Text = "下载组件更新";
-            description.Text = "官方新版本通过兼容检查后会用于新任务。";
-            status.ForeColor = Ink;
-            status.Text = "正在查询版本…";
-            primary.Enabled = false;
-            bool hasBrowser = browsers.Visible;
-            browsers.Visible = accounts.Visible = updates.Visible = false;
-            progress.Visible = true;
+            description.Visible = false;
+            ShowStatus("正在查询版本…");
+            progress.Style = ProgressBarStyle.Marquee;
             progress.Value = 0;
-            secondary.Text = "取消";
+            SetCheckingComponents(true);
             using (install = new CancellationTokenSource())
             {
                 var update = (IProgress<Tuple<string, int>>)new Progress<Tuple<string, int>>(value => UpdateProgress(value.Item1, value.Item2));
@@ -366,35 +409,46 @@ namespace VeyloSetup
                 {
                     var result = await Task.Run(() => installer.UpdateComponents((message, percent) =>
                         update.Report(Tuple.Create(message, percent)), install.Token));
-                    status.Text = string.Join(Environment.NewLine, result);
+                    ShowStatus(string.Join(Environment.NewLine, result));
                 }
-                catch (OperationCanceledException) { status.Text = "已停止检查更新。"; }
-                catch (Exception error) { status.Text = UserMessage(error); status.ForeColor = Error; }
+                catch (OperationCanceledException) { ShowStatus("已停止检查更新。"); }
+                catch (Exception error) { ShowStatus(UserMessage(error), true); }
             }
             install = null;
-            progress.Visible = false;
-            accounts.Visible = updates.Visible = true;
-            browsers.Visible = hasBrowser;
-            primary.Enabled = secondary.Enabled = true;
-            secondary.Text = "复制路径";
+            SetCheckingComponents(false);
         }
 
-        private void CopyFolder()
+        private bool CopyFolder()
         {
-            try { Clipboard.SetText(installer.Extension); status.Text = "已复制路径。在浏览器的文件夹窗口里粘贴并确认。"; }
-            catch (System.Runtime.InteropServices.ExternalException) { status.Text = "请手动复制扩展目录 " + installer.Extension; }
+            ShowBrowserInstructions();
+            try
+            {
+                Clipboard.SetText(installer.Extension);
+                ShowStatus("已复制路径。在浏览器的文件夹窗口里粘贴并确认。");
+                return true;
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                ShowStatus("剪贴板暂时不可用。扩展目录为 " + installer.Extension, true);
+                return false;
+            }
         }
 
         private void OpenExtensions()
         {
-            CopyFolder();
+            bool copied = CopyFolder();
+            var browser = browsers.SelectedItem as Browser;
             try
             {
-                var browser = browsers.SelectedItem as Browser;
                 if (browser != null) Process.Start(new ProcessStartInfo(browser.Path, browser.Page) { UseShellExecute = false });
                 else Process.Start(new ProcessStartInfo("explorer.exe", Files.Quote(installer.Extension)) { UseShellExecute = false });
             }
-            catch (System.ComponentModel.Win32Exception) { status.Text = "未能打开浏览器。请在所用浏览器中打开扩展管理页并粘贴已复制的路径。"; }
+            catch (Win32Exception)
+            {
+                string message = browser != null ? "请手动打开浏览器的扩展管理页。" : "未能打开扩展文件夹。";
+                ShowStatus(message +
+                    (copied ? "扩展目录已复制。" : "扩展目录为 " + installer.Extension), true);
+            }
         }
 
         private static IEnumerable<Browser> InstalledBrowsers()

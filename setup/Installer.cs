@@ -15,7 +15,7 @@ namespace VeyloSetup
 {
     internal sealed partial class Installer
     {
-        public const string Version = "2.4.7";
+        public const string Version = "2.4.8";
         // Setup-only updates reuse the directory already loaded by the browser.
         private const string AppVersion = "2.4.5";
         internal const string AppDirectory = "app-" + AppVersion;

@@ -2,7 +2,7 @@ name: Clean Windows setup
 on:
   workflow_dispatch:
   push:
-    branches: [verify/setup-2.4.7]
+    branches: [verify/setup-2.4.8]
 permissions:
   contents: read
 jobs:
@@ -30,7 +30,7 @@ jobs:
           $Source = (Resolve-Path -LiteralPath 'tests/setup_layout_test.cs').Path
           & $Compiler /nologo /target:exe /platform:x64 /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll "/win32manifest:$Manifest" "/out:$LayoutCheck" $Source
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $LayoutCheck dist/Veylo-2.4.7-Setup-x64.exe
+          & $LayoutCheck dist/Veylo-2.4.8-Setup-x64.exe
       - name: Run the Setup release executable on this fresh VM
         run: python -B tests/setup_clean_install_test.py
       - name: Install to a selected path and check browser registration
@@ -47,6 +47,11 @@ jobs:
           node tests/setup_browser_test.cjs
       - name: Verify compatible component updates and rollback
         run: python -B tests/setup_component_update_test.py
+      - name: Exercise the installed Setup window actions
+        shell: pwsh
+        run: |
+          $LayoutCheck = Join-Path $env:RUNNER_TEMP 'veylo-setup-layout.exe'
+          & $LayoutCheck dist/Veylo-2.4.8-Setup-x64.exe --installed-actions
       - name: Verify cold start regression and existing extension behavior
         shell: pwsh
         run: |
@@ -71,7 +76,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: |
-            dist/Veylo-2.4.7-Setup-x64.exe
+            dist/Veylo-2.4.8-Setup-x64.exe
             dist/SHA256SUMS.txt
             dist/clean-install-report.json
             dist/clean-browser-popup.png

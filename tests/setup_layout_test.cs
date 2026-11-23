@@ -4,17 +4,27 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Forms;
 
 internal static class SetupLayoutTest
 {
+    private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
+
     [DllImport("user32")]
     private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
 
     [STAThread]
     private static void Main(string[] args)
     {
-        if (args.Length == 2 && args[1] == "--96")
+        if (args.Length == 3 && args[0] == "--browser-launch")
+        {
+            string temporary = args[1] + ".tmp";
+            File.WriteAllText(temporary, args[2]);
+            File.Move(temporary, args[1]);
+            return;
+        }
+        if (args.Contains("--96"))
         {
             // The DPI-unaware thread uses 96 DPI without changing the desktop settings.
             Require(SetThreadDpiAwarenessContext(new IntPtr(-1)) != IntPtr.Zero, "Could not set the test thread to 96 DPI");
@@ -74,6 +84,13 @@ internal static class SetupLayoutTest
             CheckInClient(form, progress);
 
             setup.GetMethod("ShowFinished", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(form, null);
+            bool installedActions = args.Contains("--installed-actions");
+            var installRoot = installedActions ? Environment.GetEnvironmentVariable("VEYLO_TEST_INSTALL_DIR")
+                : Path.Combine(Path.GetTempPath(), "Veylo layout fixture");
+            Require(!installedActions || (!string.IsNullOrEmpty(installRoot) && Directory.Exists(installRoot)),
+                    "The installed actions test needs the disposable Windows installation");
+            var installer = setup.Assembly.GetType("VeyloSetup.Installer", true);
+            setup.GetField("installer", Private).SetValue(form, Activator.CreateInstance(installer, installRoot));
             status.Text = "FluentYTDL 3.7.6 · 官方 3.7.7 等待 Veylo 兼容验证。\r\n"
                         + "Bili23 2.14.0 · 官方 2.21.0 等待 Veylo 兼容验证。\r\n"
                         + "yt-dlp 2026.11.20 · 已更新至官方版本。";
@@ -82,19 +99,134 @@ internal static class SetupLayoutTest
             CheckText(status);
             var accounts = Field<LinkLabel>(form, "accounts");
             var updates = Field<LinkLabel>(form, "updates");
-            CheckText(accounts);
-            CheckText(updates);
+            CheckTextIn(form, accounts);
+            CheckTextIn(form, updates);
             Require(!accounts.Bounds.IntersectsWith(updates.Bounds), "Setup links must fit beside or below each other");
-            CheckTextIn(form, Field<Button>(form, "primary"));
+            var browsers = Field<ComboBox>(form, "browsers");
+            if (browsers.Visible) CheckInClient(form, browsers);
+            CheckTextIn(form, primary);
             CheckTextIn(form, cancel);
-            Console.WriteLine("PASS Setup location, retry, progress and update layout at {0} DPI",
+            CheckMenu(form, accounts, "accountMenu", 2);
+            CheckMenu(form, updates, "updateMenu", 3);
+            if (installedActions) CheckInstalledActions(form, installRoot);
+            else
+            {
+                for (int option = 0; option < 2; option++)
+                {
+                    ClickMenuItem(form, accounts, "accountMenu", option);
+                    Require(status.Text.StartsWith("未能打开") && primary.Enabled && cancel.Enabled,
+                            "A missing account app must leave the Setup actions available");
+                }
+            }
+            Console.WriteLine("PASS Setup layout, menus and post-install controls at {0} DPI",
                               form.CurrentAutoScaleDimensions.Width);
         }
     }
 
+    private static void CheckMenu(Form form, LinkLabel link, string field, int count)
+    {
+        foreach (var reason in new[] { ToolStripDropDownCloseReason.Keyboard, ToolStripDropDownCloseReason.AppClicked })
+        {
+            var menu = OpenMenu(form, link, field);
+            Require(menu.Items.Count == count, "Missing items in " + link.Text);
+            Require(Screen.FromControl(menu).WorkingArea.Contains(menu.Bounds), "Menu is outside the screen");
+            menu.Close(reason);
+            Require(!menu.Visible && !menu.IsDisposed, "Menu must close and remain available: " + link.Text);
+        }
+    }
+
+    private static ContextMenuStrip OpenMenu(Form form, LinkLabel link, string field)
+    {
+        var clicked = new LinkLabelLinkClickedEventArgs(link.Links[0]);
+        typeof(LinkLabel).GetMethod("OnLinkClicked", Private).Invoke(link, new object[] { clicked });
+        var menu = Field<ContextMenuStrip>(form, field);
+        Require(menu.Visible, "Failed to open " + link.Text);
+        return menu;
+    }
+
+    private static void ClickMenuItem(Form form, LinkLabel link, string field, int index)
+    {
+        var menu = OpenMenu(form, link, field);
+        menu.Items[index].PerformClick();
+        if (menu.Visible) menu.Close();
+    }
+
+    private static void CheckInstalledActions(Form form, string installRoot)
+    {
+        var primary = Field<Button>(form, "primary");
+        var secondary = Field<Button>(form, "secondary");
+        var status = Field<Label>(form, "status");
+        var updates = Field<LinkLabel>(form, "updates");
+        var progress = Field<ProgressBar>(form, "progress");
+        var browsers = Field<ComboBox>(form, "browsers");
+        string extension = Path.Combine(installRoot, "app-2.4.5", "extension");
+
+        ClickMenuItem(form, updates, "updateMenu", 0);
+        Require(progress.Visible && !primary.Enabled && updates.Visible && !updates.Enabled,
+                "Running updates must keep the controls in view");
+        secondary.PerformClick();
+        Require(status.Text == "正在停止检查更新…", "Update cancellation must identify the operation");
+        WaitUntil(() => !progress.Visible, TimeSpan.FromSeconds(30));
+        Require(status.Text == "已停止检查更新。" && primary.Enabled && updates.Enabled && secondary.Enabled,
+                "Cancelling updates must restore the actions");
+
+        ClickMenuItem(form, updates, "updateMenu", 0);
+        WaitUntil(() => !progress.Visible, TimeSpan.FromMinutes(4));
+        Require(status.Text.Contains("Bili23") && updates.Enabled, "Update results must leave the menu usable");
+        CheckTextIn(form, updates);
+        CheckTextIn(form, Field<LinkLabel>(form, "accounts"));
+
+        ClickMenuItem(form, updates, "updateMenu", 1);
+        Require(progress.Visible, "Enabling automatic updates must start a check");
+        secondary.PerformClick();
+        WaitUntil(() => !progress.Visible, TimeSpan.FromSeconds(30));
+        ClickMenuItem(form, updates, "updateMenu", 2);
+        Require(status.Text.StartsWith("已恢复随包 yt-dlp"), "Restore must report its result");
+        var menu = OpenMenu(form, updates, "updateMenu");
+        Require(!((ToolStripMenuItem)menu.Items[1]).Checked, "Restore must disable automatic updates");
+        menu.Close();
+
+        secondary.PerformClick();
+        Require(status.Text.StartsWith("已复制路径") && Clipboard.GetText() == extension,
+                "Copy must use the selected installation after updating");
+
+        // Keep the browser action on the normal Process.Start path with a harmless test executable.
+        var kind = form.GetType().GetNestedType("Browser", BindingFlags.NonPublic);
+        object browser = Activator.CreateInstance(kind, true);
+        kind.GetField("Name").SetValue(browser, "Setup test browser");
+        string record = Path.Combine(Path.GetTempPath(), "veylo-browser-action-" + Guid.NewGuid().ToString("N") + ".txt");
+        kind.GetField("Page").SetValue(browser, "--browser-launch \"" + record + "\" chrome://extensions/");
+        kind.GetField("Path").SetValue(browser, record + ".exe");
+        browsers.Items.Add(browser);
+        browsers.SelectedItem = browser;
+        primary.PerformClick();
+        Require(status.Text.Contains("手动打开") && primary.Enabled, "Failed launch must leave a usable fallback");
+        try
+        {
+            kind.GetField("Path").SetValue(browser, Assembly.GetExecutingAssembly().Location);
+            primary.PerformClick();
+            WaitUntil(() => File.Exists(record), TimeSpan.FromSeconds(10));
+            Require(File.ReadAllText(record) == "chrome://extensions/" && Clipboard.GetText() == extension,
+                    "Browser action must open the extensions page and copy the selected path");
+        }
+        finally { File.Delete(record); }
+        Console.WriteLine("PASS update success, cancellation, automatic check, restore, clipboard and launch actions");
+    }
+
+    private static void WaitUntil(Func<bool> done, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!done() && DateTime.UtcNow < deadline)
+        {
+            Application.DoEvents();
+            Thread.Sleep(20);
+        }
+        Require(done(), "A Setup action did not finish in time");
+    }
+
     private static T Field<T>(Form form, string name) where T : Control
     {
-        return (T)form.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(form);
+        return (T)form.GetType().GetField(name, Private).GetValue(form);
     }
 
     private static void CheckText(Control control)
@@ -117,9 +249,13 @@ internal static class SetupLayoutTest
 
     private static void CheckInClient(Form form, Control control)
     {
-        var bounds = form.RectangleToClient(control.RectangleToScreen(control.ClientRectangle));
-        Require(control.Visible && bounds.Width > 0 && bounds.Height > 0 && form.ClientRectangle.Contains(bounds),
-                "Setup action or progress is outside the window: " + control.GetType().Name);
+        var bounds = control.RectangleToScreen(control.ClientRectangle);
+        Require(control.Visible && bounds.Width > 0 && bounds.Height > 0, "Missing control: " + control.GetType().Name);
+        for (Control parent = control.Parent; parent != null; parent = parent.Parent)
+        {
+            Require(parent.RectangleToScreen(parent.ClientRectangle).Contains(bounds), "Clipped control: " + control.Text);
+            if (parent == form) break;
+        }
     }
 
     private static void Require(bool condition, string message)

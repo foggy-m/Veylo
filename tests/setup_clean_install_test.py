@@ -8,7 +8,7 @@ import sys
 import winreg
 
 ROOT = Path(__file__).resolve().parents[1]
-SETUP = ROOT / 'dist/Veylo-2.4.7-Setup-x64.exe'
+SETUP = ROOT / 'dist/Veylo-2.4.8-Setup-x64.exe'
 APP_DIR = 'app-2.4.5'
 ORIGIN = 'chrome-extension://ikaahmfclfkamdgikchmjnoalpklkddk/'
 HOSTS = {'com.veylo.youtube_x': 'native/ShiguangBridge.exe', 'com.veylo.bilibili': 'bilibili/native/BiliBridge.exe'}
@@ -45,7 +45,7 @@ def main():
     assert not install.exists() and not bili_profile.exists(), 'Use an unused Windows profile'
     print('PASS clean Windows user has neither an installation nor a Bili23 profile', flush=True)
     exe = SETUP
-    assert command(exe, '--version').strip() == '2.4.7', 'GUI executable must support redirected output without a console'
+    assert command(exe, '--version').strip() == '2.4.8', 'GUI executable must support redirected output without a console'
     print(command(exe, '--quiet', timeout=1000), flush=True)
     app = install / APP_DIR
     fluent, bili = install / 'vendor/FluentYTDL-3.7.6', install / 'vendor/Bili23-2.14.0'
